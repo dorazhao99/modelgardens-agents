@@ -87,7 +87,7 @@ class CodeAgent(Agent):
             f"4. Edit the code in the branch to complete the task."
             f"5. Commit the changes to the branch."
             f"6. Push the changes to the branch."
-            f"7. Create a pull request to the repository."
+            f"7. Create a pull request to the repository.  It's fine to point to the url that will create the pull request as the pull request url.  Be clear about what this url is though!"
             f"You may wish to add more detailed steps to the task as you need for certain more specific tasks.  Be sure to ALWAYS create a branch and a pull request for the task."
         )
 

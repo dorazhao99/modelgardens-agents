@@ -5,7 +5,7 @@ import json
 import hashlib
 import argparse
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional, Any, Tuple
 
 from platformdirs import user_data_dir
 from openhands.events.action import MessageAction
@@ -65,28 +65,49 @@ def _build_headless_args(
         max_budget_per_task=max_budget_per_task,
         no_auto_continue=no_auto_continue,
         selected_repo=selected_repo,
-        # NOTE: do NOT add save_trajectory here; it isn't parsed. We set on config directly.
+        # NOTE: do NOT add save_trajectory here; not parsed by args
     )
 
 
-def _extract_pr_url_from_json(obj: Any) -> Optional[str]:
-    """Recursively walk a JSON-like structure to find a GitHub PR URL."""
+def _extract_pr_links_from_json(obj: Any) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Recursively search a JSON-like object for GitHub PR links.
+
+    Returns:
+        (pr_url, pr_create_url)
+        - pr_url:        https://github.com/<owner>/<repo>/pull/<number>
+        - pr_create_url: https://github.com/<owner>/<repo>/pull/new/<ref>
+    """
     import re
-    PR_RE = re.compile(r"https://github\.com/[^/\s]+/[^/\s]+/pull/\d+")
+    PR_NUMBER_RE = re.compile(r"https://github\.com/[^/\s]+/[^/\s]+/pull/\d+")
+    PR_CREATE_RE = re.compile(r"https://github\.com/[^/\s]+/[^/\s]+/pull/new/[A-Za-z0-9._\-/]+")
+
+    def scan_text(s: str) -> Tuple[Optional[str], Optional[str]]:
+        a = PR_NUMBER_RE.search(s)
+        b = PR_CREATE_RE.search(s)
+        return (a.group(0) if a else None, b.group(0) if b else None)
+
     if isinstance(obj, str):
-        m = PR_RE.search(obj)
-        return m.group(0) if m else None
+        return scan_text(obj)
+
+    pr_url: Optional[str] = None
+    pr_create_url: Optional[str] = None
+
     if isinstance(obj, dict):
-        for v in obj.values():
-            hit = _extract_pr_url_from_json(v)
-            if hit:
-                return hit
+        iterator = obj.values()
     elif isinstance(obj, list):
-        for v in obj:
-            hit = _extract_pr_url_from_json(v)
-            if hit:
-                return hit
-    return None
+        iterator = obj
+    else:
+        iterator = []
+
+    for v in iterator:
+        a, b = _extract_pr_links_from_json(v)
+        pr_url = pr_url or a
+        pr_create_url = pr_create_url or b
+        if pr_url and pr_create_url:
+            break
+
+    return pr_url, pr_create_url
 
 
 def _ensure_git_identity():
@@ -125,6 +146,7 @@ async def run_openhands_task_with_pr_async(
           "sid": str | None,
           "final_state": str | None,
           "pr_url": str | None,
+          "pr_create_url": str | None,
           "trajectory_path": str
         }
     """
@@ -154,6 +176,7 @@ async def run_openhands_task_with_pr_async(
 
     # Wire the exact field the main loop checks:
     config.save_trajectory_path = str(traj_path)
+
     # Defensive: ensure the repo is set on the sandbox
     if getattr(config, "sandbox", None):
         config.sandbox.selected_repo = repo
@@ -169,14 +192,17 @@ async def run_openhands_task_with_pr_async(
         "sid": getattr(state, "sid", None),
         "final_state": state.agent_state.name if state else None,
         "pr_url": None,
+        "pr_create_url": None,
         "trajectory_path": str(traj_path),
     }
 
-    # Parse trajectory for a PR URL (robust recursive search)
+    # Parse trajectory for PR links (numbered + create-PR)
     try:
         with open(traj_path, "r", encoding="utf-8") as f:
             hist = json.load(f)
-        result["pr_url"] = _extract_pr_url_from_json(hist)
+        pr_url, pr_create_url = _extract_pr_links_from_json(hist)
+        result["pr_url"] = pr_url or pr_create_url  # prefer numbered, fallback to create-PR link
+        result["pr_create_url"] = pr_create_url
     except FileNotFoundError:
         # Leave pr_url as None; caller can inspect logs/agent state
         pass
@@ -203,7 +229,7 @@ def run_openhands_task_with_pr(
     Prefer the async version in async code paths.
     """
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
     except RuntimeError:
         # No loop running: safe to create one.
         return asyncio.run(
