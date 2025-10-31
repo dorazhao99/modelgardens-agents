@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 import asyncio
 from dotenv import load_dotenv
+import os
 
 load_dotenv()
 
@@ -12,6 +13,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from dev.agents.agent import Agent, AgentResult
 from dev.agents.tools.fast_find import find_folders
+from dev.agents.tools.get_git_repo import get_repo_full_name
+from dev.agents.code.openhands_tool import run_openhands_task_with_pr_async
 
 import dspy
 
@@ -40,7 +43,7 @@ class FindRepository(dspy.Module):
     def forward(self, project_name: str, project_context: str, task_context: str) -> str:
         potential_repository_names = self.identify_repository_name(project_name=project_name, task_context=task_context, project_context=project_context).potential_repository_names
 
-        print(f"Potential repository names: {potential_repository_names}")
+        # print(f"Potential repository names: {potential_repository_names}")
 
         actual_files_and_folders = []
 
@@ -48,7 +51,7 @@ class FindRepository(dspy.Module):
             search_results = find_folders(potential_repository_name, max_results=5, timeout=5, backend_timeout=5)
             actual_files_and_folders.extend([str(result) for result in search_results])
 
-        print(f"Actual files and folders: {actual_files_and_folders}")
+        # print(f"Actual files and folders: {actual_files_and_folders}")
 
         repository_path = self.select_repository_name(project_name=project_name, task_context=task_context, project_context=project_context, actual_files_and_folders=actual_files_and_folders).repository_path
         return repository_path
@@ -59,20 +62,58 @@ class CodeAgent(Agent):
         self.model = model or dspy.settings.lm
         self.find_repository = FindRepository()
 
-
     async def run(self, project_name: str, project_context: str, task_context: str) -> AgentResult:
+
+        os.environ["SANDBOX_RUNTIME_CONTAINER_IMAGE"] = "docker.all-hands.dev/all-hands-ai/runtime:0.59-nikolaik"
+
         with dspy.context(lm=self.model):
-            # First find the repository that we are working on
-            repository_path = self.find_repository(project_name=project_name, project_context=project_context, task_context=task_context)
+            repository_path = self.find_repository(
+                project_name=project_name,
+                project_context=project_context,
+                task_context=task_context
+            )
 
-        return AgentResult(success=True, message=f"Found repository at {repository_path}", artifact_uri=repository_path)
+        repo_full_name = get_repo_full_name(repository_path)
+        full_task = (
+            f"We are working on the {repo_full_name} repository.  "
+            f"The broader project is {project_name}. Some broader details about the project are shared below ===\n"
+            f"{project_context}\n===\n\n"
+            f"HOWEVER I want you to focus only on this specific task: ===\n"
+            f"{task_context}\n===\n\n"
+            f"Please follow the following steps to complete the task: ===\n"
+            f"1. Make a branch in the repository called `precursor-<task> where <task> is a single word identifying the task."
+            f"2. Check out the branch."
+            f"3. Investigate the repository to understand the codebase and the task."
+            f"4. Edit the code in the branch to complete the task."
+            f"5. Commit the changes to the branch."
+            f"6. Push the changes to the branch."
+            f"7. Create a pull request to the repository."
+            f"You may wish to add more detailed steps to the task as you need for certain more specific tasks.  Be sure to ALWAYS create a branch and a pull request for the task."
+        )
 
-if __name__ == "__main__":
+        # await the async call, not wrap in asyncio.run
+        result = await run_openhands_task_with_pr_async(
+            project_name=project_name,
+            repo=repo_full_name,
+            task=full_task,
+            github_token=os.getenv("GITHUB_TOKEN")
+        )
+
+        print(f"Result: {result}")
+
+        if result.get('final_state') == 'ERROR':
+            return AgentResult(success=False, message=f"Error submitting pull request to {repo_full_name}", artifact_uri="")
+        elif result.get('final_state') == 'FINISHED':
+            return AgentResult(success=True, message=f"Submitted pull request to {repo_full_name} ({result.get('pr_url')})", artifact_uri=result.get('pr_url'))
+        else:
+            return AgentResult(success=False, message=f"Unknown final state: {result.get('final_state')}", artifact_uri="")
+
+async def main():
     model = dspy.LM('openai/gpt-4o-mini-2024-07-18')
     dspy.configure(lm=model)
 
     code_agent = CodeAgent(model)
-    result = asyncio.run(code_agent.run(project_name="AutoMetrics Release", project_context="""# AutoMetrics Release
+    result = await code_agent.run(project_name="AutoMetrics Release", project_context="""# AutoMetrics Release
 
 ## Ongoing Objectives
 [0] Refactor Code: Refactor and debug the code in the current project to enhance performance. (confidence: 7)
@@ -99,9 +140,9 @@ None
 [0] Refactor the code in page.tsx to improve performance, ensuring clarity in the project documentation. (confidence: 7)
 [1] finalize the integration of all software components and ensure they function correctly together. (confidence: 7)
 [2] Finalize monitoring of API configurations and make last-minute tweaks for optimization ahead of the seminar. (confidence: 8)
-[3] Finalize and compile a detailed summary of project objectives and progress for the Stanford AI Seminar on 10/17. (confidence: 9)""", task_context="Refactor the code in page.tsx to improve performance, ensuring clarity in the project documentation."))
+[3] Finalize and compile a detailed summary of project objectives and progress for the Stanford AI Seminar on 10/17. (confidence: 9)""", task_context="Refactor the code in page.tsx to improve performance, ensuring clarity in the project documentation.")
 
-#     result = asyncio.run(code_agent.run(project_name="Background Agents", project_context="""# Background Agents
+#     result = await code_agent.run(project_name="Background Agents", project_context="""# Background Agents
 
 # ## Ongoing Objectives
 # [0] Improve Logging Functionality: Enhance the logging capabilities in the ObjectiveInducer class to ensure accurate data processing. (confidence: 8)
@@ -173,6 +214,9 @@ None
 # [22] Review all aspects of the logging functionality and JSON serialization issues to ensure they are effectively addressed before the upcoming AI Suggestion Review and Stanford AI Seminar. (confidence: 9)
 # [23] Emphasize the completion of all coding tasks related to logging functionality and Firestore integration to ensure they are polished and ready for the upcoming AI Suggestion Review and Stanford AI Seminar on 2025-10-17. (confidence: 9)
 # [24] Create a timeline for addressing any remaining issues with logging functionality and Firestore integration in preparation for the upcoming AI Suggestion Review and Stanford AI Seminar on 2025-10-17. (confidence: 8)
-# """, task_context="Review all aspects of the logging functionality and JSON serialization issues to ensure they are effectively addressed before the upcoming AI Suggestion Review and Stanford AI Seminar."))
+# """, task_context="Review all aspects of the logging functionality and JSON serialization issues to ensure they are effectively addressed before the upcoming AI Suggestion Review and Stanford AI Seminar.")
 
     print(result)
+
+if __name__ == "__main__":
+    asyncio.run(main())
