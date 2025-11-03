@@ -12,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from dev.agents.agent import Agent, AgentResult
 from dev.agents.gdrive.drive_tools import DriveTools
+from dev.agents.tools.query_gum import GumTools
 
 class GoogleDriveActions(dspy.Signature):
     """Given a task and some project context, alongside a set of Google Drive tools, take the appropriate actions to complete the task.  
@@ -26,11 +27,12 @@ At the end, please output a summary of what you did to complete the task as well
     summary: str = dspy.OutputField(description="A summary of what you did to complete the task.")
 
 class GoogleDriveAgent(Agent):
-    def __init__(self, model: dspy.LM):
+    def __init__(self, model: dspy.LM, name: str):
         super().__init__("GoogleDriveAgent", "A Google Drive agent that can search for/read files and create documents.  It can also edit/comment on documents.")
         self.drive_tools = DriveTools()
+        self.gum_tools = GumTools(name=name, model="gpt-4.1")
         self.model = model or dspy.settings.lm
-        self.google_drive_actions = dspy.ReAct(GoogleDriveActions, tools=[self.drive_tools.search_files, self.drive_tools.get_file_as_text, self.drive_tools.create_google_doc, self.drive_tools.suggest_edit])
+        self.google_drive_actions = dspy.ReAct(GoogleDriveActions, tools=[self.drive_tools.search_files, self.drive_tools.get_file_as_text, self.drive_tools.create_google_doc, self.drive_tools.suggest_edit, self.gum_tools.search_user_data])
 
     def run(self, project_name: str, project_context: str, task_context: str) -> AgentResult:
         with dspy.context(lm=self.model):
@@ -45,7 +47,7 @@ if __name__ == "__main__":
     model = dspy.LM('openai/gpt-5', temperature=1.0, max_tokens=16000)
     dspy.configure(lm=model)
 
-    google_drive_agent = GoogleDriveAgent(model)
+    google_drive_agent = GoogleDriveAgent(model, name="Michael Ryan")
     result = google_drive_agent.run(project_name="AutoMetrics Release", project_context="""# AutoMetrics Release
 
 ## Ongoing Objectives
