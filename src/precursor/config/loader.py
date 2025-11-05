@@ -125,6 +125,22 @@ def get_project_names(only_enabled: bool = True) -> list[str]:
             names.append(name)
     return names
 
+
+def get_user_name() -> str:
+    """
+    Return the user name from user.yaml.
+    """
+    cfg = load_user_yaml()
+    return cfg.get("name", "")
+
+
+def get_user_description() -> str:
+    """
+    Return the user description from user.yaml.
+    """
+    cfg = load_user_yaml()
+    return cfg.get("description", "")
+
 def get_user_profile() -> str:
     """
     Return the user profile from user.yaml.
