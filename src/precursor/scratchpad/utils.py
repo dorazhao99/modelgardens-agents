@@ -1,56 +1,38 @@
 # src/precursor/scratchpad/utils.py
 """
-Utility functions for the scratchpad package.
+Scratchpad-specific helpers.
 
-Includes helpers for:
-- Project validation and metadata (via config/projects.yaml)
-- Safe YAML loading for scratchpad context
+Keeps logic that needs the scratchpad store/render close to the scratchpad
+package (instead of putting it in the classifier).
 """
 
 from __future__ import annotations
 
-from typing import List, Dict
-from precursor.config.loader import load_projects_yaml
+from typing import Any, Dict, List
+
+from precursor.scratchpad import store as scratchpad_store
+from precursor.scratchpad import render as scratchpad_render
 
 
-def get_project_names(*, only_enabled: bool = True) -> List[str]:
+def render_all_scratchpads_for_projects(
+    projects: List[Dict[str, Any]],
+    *,
+    max_chars_per_project: int = 4000,
+) -> str:
     """
-    Return the list of project names declared in config/projects.yaml.
+    Given a list of normalized projects (with "name" and "enabled"),
+    render each enabled project's scratchpad and stitch them together.
 
-    Parameters
-    ----------
-    only_enabled : bool
-        If True, filter out projects with `enabled: false`.
-    """
-    cfg = load_projects_yaml()
-    projects = cfg.get("projects", [])
-    names: List[str] = []
-    for proj in projects:
-        name = proj.get("name")
-        if not name:
-            continue
-        if only_enabled:
-            if proj.get("enabled", True):
-                names.append(name)
-        else:
-            names.append(name)
-    return names
+    Any project that doesn't have a scratchpad yet is skipped.
 
+    This is the thing the project classifier wants.
+    """
+    scratchpad_store.init_db()
 
-def is_valid_project(project_name: str) -> bool:
-    """
-    True iff the given project name appears in config/projects.yaml
-    (regardless of enabled/disabled).
-    """
-    return project_name in get_project_names(only_enabled=False)
-
-
-def is_project_enabled(project_name: str) -> bool:
-    """
-    True iff the project exists AND is not explicitly disabled.
-    """
-    cfg = load_projects_yaml()
-    for proj in cfg.get("projects", []):
-        if proj.get("name") == project_name:
-            return proj.get("enabled", True)
-    return False
+    chunks: List[str] = []
+    for p in projects:
+        project_name = p["name"]
+        text = scratchpad_render.render_project_scratchpad(project_name)
+        snippet = text[:max_chars_per_project]
+        chunks.append(f"--- Scratchpad for {project_name} ---\n{snippet}")
+    return "\n\n".join(chunks)

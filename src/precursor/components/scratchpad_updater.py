@@ -5,15 +5,16 @@ from typing import Optional, List, Dict, Any
 
 import dspy
 
-from scratchpad import render, store
-from scratchpad.scratchpad_tools import (
+from precursor.scratchpad import render, store
+from precursor.scratchpad.scratchpad_tools import (
     append_to_scratchpad,
     edit_in_scratchpad,
     remove_from_scratchpad,
     get_refreshed_scratchpad,
 )
 
-from config.loader import get_project_names
+from precursor.config.loader import get_project_names
+from precursor.config.loader import get_user_profile
 
 class ProjectResource(dspy.BaseModel):
     """Lightweight resource schema used by the extractor."""
@@ -294,7 +295,7 @@ class ScratchpadUpdater(dspy.Module):
             user_context=user_context,
             potential_resources=potential_resources_str,
             current_screenshot=current_screenshot,
-            user_profile=user_profile or "",
+            user_profile=user_profile or get_user_profile(),
         )
 
         # re-render after edits

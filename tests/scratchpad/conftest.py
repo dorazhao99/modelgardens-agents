@@ -28,10 +28,10 @@ def scratchpad_test_env(tmp_path, monkeypatch):
         """projects:
   - name: "Test Project Alpha"
     description: "A test project used in unit tests."
-    enabled: true
+    agent_enabled: true
   - name: "Misc"
     description: "Fallback"
-    enabled: true
+    agent_enabled: true
 """,
         encoding="utf-8",
     )

@@ -124,3 +124,12 @@ def get_project_names(only_enabled: bool = True) -> list[str]:
         if name:
             names.append(name)
     return names
+
+def get_user_profile() -> str:
+    """
+    Return the user profile from user.yaml.
+    """
+    cfg = load_user_yaml()
+    name = cfg.get("name", "")
+    description = cfg.get("description", "")
+    return f"Name: {name}\nDescription: {description}"

@@ -26,9 +26,7 @@ from typing import Any, Dict, List, Optional
 from platformdirs import user_data_dir
 
 from precursor.scratchpad.schema import PROJECT_SECTIONS, PROJECT_RESOURCE_SUBSECTIONS
-from precursor.scratchpad.utils import (
-    is_valid_project,  # <--- this is the new source of truth
-)
+from precursor.projects.utils import is_valid_project
 
 
 # ============================================================================

@@ -1,4 +1,4 @@
-# scratchpad/schema.py
+# src/precursor/scratchpad/schema.py
 
 PROJECT_SECTIONS = [
     "Ongoing Objectives",
@@ -7,9 +7,11 @@ PROJECT_SECTIONS = [
     "Notes",
     "Project Resources",
     "Next Steps",
+    "Agent Completed Tasks (Pending Review)",
+    "Accepted Agent Completed Tasks",
+    "Rejected Agent Completed Tasks",
 ]
 
-# for the big “Files, Repos, …” section
 PROJECT_RESOURCE_SUBSECTIONS = [
     "Files",
     "Repos",
