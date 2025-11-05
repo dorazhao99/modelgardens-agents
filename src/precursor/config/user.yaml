@@ -1,0 +1,13 @@
+# config/user.yaml
+# ---------------------------------------------------------------------------
+# User profile / preferences
+# ---------------------------------------------------------------------------
+# This file is meant for LLM-facing components that want to tailor behavior
+# to *you* (priorities, personality, preferences, etc).
+# ---------------------------------------------------------------------------
+
+name: "Michael Ryan"
+description: |
+  I am a CS PhD student (NLP) at Stanford.  
+  I work across several concurrent research-y projects.  
+  I am interested in building personalized LLM tooling.

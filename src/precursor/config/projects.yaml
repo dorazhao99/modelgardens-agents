@@ -1,0 +1,51 @@
+# config/projects.yaml
+# ---------------------------------------------------------------------------
+# Project Registry
+# ---------------------------------------------------------------------------
+# This file defines the projects that the MCP-enabled agent is allowed to
+# operate on.
+#
+# Each project:
+#   name:           (required) unique project name; this is what tools/agent use
+#   description:    (optional) short human or model-readable explanation of what
+#                   the project is about. The scratchpad renderer will display
+#                   this directly under the project title if present.
+#   agent_enabled:  (optional, bool) whether background/auto agents are allowed
+#                   to operate on this project. Defaults to true if omitted.
+#
+# You can safely add more projects here; the scratchpad/store layer will
+# validate against this list.
+# ---------------------------------------------------------------------------
+
+projects:
+  - name: "AutoMetrics Release"
+    description: "Working on a website demo, polishing the overleaf, responding to ICLR reviews, and running some final experiments for the AutoMetrics paper."
+    agent_enabled: true
+
+  - name: "Personalization Dataset Collection"
+    description: "Working on large-scale longitudinal chatbot personalization data collection.  This project requires IRB approval."
+    agent_enabled: true
+
+  - name: "NLP Retreat Planning"
+    description: "Organizing a debate-style event for the NLP retreat (Oct 25-26)."
+    agent_enabled: true
+
+  - name: "Background Agents"
+    description: "Agents that observe the user's work and when the user is idle or working on a separate project, they will automatically perform background tasks to help the user.  Name may be changed to 'Precursor'"
+    agent_enabled: true
+
+  - name: "HW3 Assignment Creation"
+    description: "Working on creating a homework assignment for Diyi's CS329X course.  The assignment involves setting up a collaborative AI-human interaction environment and also building automatic evaluation metrics for the interaction using AutoMetrics."
+    agent_enabled: true
+
+  - name: "Logistics"
+    description: "General-purpose operational tasks that don’t belong to another project.  This includes tasks such as booking a hotel room, organizing a carpool, buying a plane ticket, scheduling a meeting, etc. As long as the logistics are not related to another project, they should be added here."
+    agent_enabled: false
+
+  - name: "Misc"
+    description: "Work that doesn't seem to fit into another project.  This can be a catch-all for hard-to-categorize work."
+    agent_enabled: false
+
+  - name: "Health"
+    description: "Work related to my health.  This includes tasks such as scheduling a doctor's appointment, buying a new pair of glasses, getting a flu shot, working out, etc."
+    agent_enabled: false
