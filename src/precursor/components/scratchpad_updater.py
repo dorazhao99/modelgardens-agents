@@ -16,7 +16,9 @@ from precursor.scratchpad.scratchpad_tools import (
 from precursor.config.loader import get_project_names
 from precursor.config.loader import get_user_profile
 
-class ProjectResource(dspy.BaseModel):
+import pydantic
+
+class ProjectResource(pydantic.BaseModel):
     """Lightweight resource schema used by the extractor."""
     name: str
     description: Optional[str] = None
