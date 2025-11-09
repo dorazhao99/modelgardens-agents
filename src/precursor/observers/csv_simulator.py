@@ -14,6 +14,7 @@ from PIL import Image as PILImage
 import dspy
 
 from precursor.context.events import ContextEvent
+from precursor.config.loader import get_user_name, get_user_description, get_user_agent_goals
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,10 @@ class CSVSimulatorConfig:
     interval_seconds: float = 180.0  # 3 minutes
     # optional description to attach (e.g. from user.yaml)
     user_description: Optional[str] = None
+    # optional name to attach (e.g. from user.yaml)
+    user_name: Optional[str] = None
+    # optional agent-goals to attach (e.g. from user.yaml)
+    user_agent_goals: Optional[str] = None
 
 
 class CSVSimulatorObserver:
@@ -38,6 +43,13 @@ class CSVSimulatorObserver:
 
     def __init__(self, config: Optional[CSVSimulatorConfig] = None) -> None:
         self.config = config or CSVSimulatorConfig()
+        # fill defaults from YAML if not provided
+        if not self.config.user_name:
+            self.config.user_name = get_user_name()
+        if not self.config.user_description:
+            self.config.user_description = get_user_description()
+        if not self.config.user_agent_goals:
+            self.config.user_agent_goals = get_user_agent_goals()
 
     async def run(self, handler: Callable[[ContextEvent], Any]) -> None:
         """
@@ -53,7 +65,11 @@ class CSVSimulatorObserver:
         for row in rows:
             event = self._row_to_event(row)
             # hand off to whoever is orchestrating
-            handler(event)
+            try:
+                handler(event)
+            except StopIteration:
+                logger.info("csv simulator received early-stop signal; exiting replay loop")
+                break
 
             # pacing
             if self.config.mode == "interval":
@@ -107,8 +123,9 @@ class CSVSimulatorObserver:
             timestamp=ts,
             context_update=context_update,
             screenshot=screenshot_img,
-            user_name=(row.get("user_name") or "").strip() or None,
+            user_name=(row.get("user_name") or "").strip() or self.config.user_name,
             user_description=self.config.user_description,
+            user_agent_goals=self.config.user_agent_goals,
             recent_propositions=user_details,  # ← single source of truth
             calendar_events=calendar_events or None,
             raw=row,

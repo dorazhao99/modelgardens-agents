@@ -20,8 +20,7 @@ from pynput.mouse import Controller as MouseController
 
 import dspy  # only to wrap screenshot into dspy.Image
 
-from precursor.config.loader import get_user_profile
-from precursor.config.loader import get_user_name
+from precursor.config.loader import get_user_description, get_user_agent_goals, get_user_name
 
 # ---------------------------------------------------------------------------
 # screenshot helpers
@@ -98,7 +97,8 @@ async def build_user_activity_context(
     - current context update (what the caller passed in)
     """
     user_name = getattr(gum_client, "user_name", get_user_name())
-    user_description = get_user_profile()
+    user_description = get_user_description()
+    user_agent_goals = get_user_agent_goals()
 
     # gum.recent() — may return a structured list
     try:
@@ -155,6 +155,7 @@ async def build_user_activity_context(
     context_str = (
         f"User: {user_name}\n"
         f"Ground Truth User Description: {user_description}\n"
+        f"Agent Goals (Things this user wants the agent to focus on; not exhaustive): {user_agent_goals}\n"
         f"User Details:\n{user_details_str}\n"
         f"Calendar Events: {calendar_events}\n"
         f"Current Context Update: {current_context}"

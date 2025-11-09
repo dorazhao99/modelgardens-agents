@@ -27,6 +27,7 @@ from platformdirs import user_data_dir
 
 from precursor.scratchpad.schema import PROJECT_SECTIONS, PROJECT_RESOURCE_SUBSECTIONS
 from precursor.projects.utils import is_valid_project
+import os
 
 
 # ============================================================================
@@ -52,6 +53,9 @@ def _get_db_path() -> Path:
     """
     Return the full path to the scratchpad SQLite database.
     """
+    env_path = os.getenv("PRECURSOR_SCRATCHPAD_DB")
+    if env_path:
+        return Path(env_path)
     return _get_data_dir() / "scratchpad.db"
 
 

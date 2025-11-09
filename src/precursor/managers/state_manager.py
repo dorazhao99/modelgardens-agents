@@ -16,7 +16,7 @@ from precursor.context.project_history import ProjectHistory
 from precursor.components.objective_inducer import ObjectivesInducer
 from precursor.components.current_project_classifier import CurrentProjectClassifier
 from precursor.components.scratchpad_updater import ScratchpadUpdater
-from precursor.config.loader import get_project_names
+from precursor.config.loader import get_project_names, get_user_profile
 from precursor.managers.utils import (
     goals_to_text,
     goals_to_objective_strings,
@@ -111,7 +111,7 @@ class StateManager:
                 project_name=current_project,
                 user_context=event.context_update,
                 current_screenshot=screenshot_img,
-                user_profile=event.user_description or "",
+                user_profile=get_user_profile(),
                 current_scratchpad=None,
                 speculated_current_objectives=current_objectives_rich,
                 speculated_former_objectives=former_objectives_rich,
@@ -162,6 +162,8 @@ class StateManager:
             parts.append(f"User: {event.user_name}")
         if event.user_description:
             parts.append(f"User Description: {event.user_description}")
+        if getattr(event, "user_agent_goals", None):
+            parts.append(f"Agent Goals (Things this user wants the agent to focus on; not exhaustive): {event.user_agent_goals}")
         # this already contains the gum "recent" output per your latest note
         if event.recent_propositions:
             parts.append(f"User Details / Recent Propositions:\n{event.recent_propositions}")

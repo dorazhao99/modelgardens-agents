@@ -36,47 +36,47 @@ def _clean_proposition_text(text: str) -> str:
     return t.strip()
 
 
-def _split_into_items(raw: str) -> List[str]:
-    raw = str(raw or "").strip()
-    if not raw:
-        return []
+# def _split_into_items(raw: str) -> List[str]:
+#     raw = str(raw or "").strip()
+#     if not raw:
+#         return []
 
-    # 1) numbered list
-    parts = re.split(r"\s+\d+[\.)]\s+", raw)
-    parts = [p.strip() for p in parts if p and p.strip()]
+#     # 1) numbered list
+#     parts = re.split(r"\s+\d+[\.)]\s+", raw)
+#     parts = [p.strip() for p in parts if p and p.strip()]
 
-    # 2) Title: description lines
-    if len(parts) <= 1:
-        lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
-        title_colon = re.compile(r"^[A-Z][A-Za-z0-9 .,'/()&_-]*:\s+")
-        if sum(1 for ln in lines if title_colon.match(ln)) >= 2:
-            parts = lines
+#     # 2) Title: description lines
+#     if len(parts) <= 1:
+#         lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+#         title_colon = re.compile(r"^[A-Z][A-Za-z0-9 .,'/()&_-]*:\s+")
+#         if sum(1 for ln in lines if title_colon.match(ln)) >= 2:
+#             parts = lines
 
-    # 3) bullets
-    if len(parts) <= 1:
-        lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
-        bullet_re = re.compile(r"^[\-•]\s+")
-        if any(bullet_re.match(ln) for ln in lines):
-            tmp: List[str] = []
-            if lines and not bullet_re.match(lines[0]):
-                tmp.append(lines[0])
-            tmp.extend([bullet_re.sub("", ln, count=1).strip() for ln in lines if bullet_re.match(ln)])
-            parts = tmp
+#     # 3) bullets
+#     if len(parts) <= 1:
+#         lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+#         bullet_re = re.compile(r"^[\-•]\s+")
+#         if any(bullet_re.match(ln) for ln in lines):
+#             tmp: List[str] = []
+#             if lines and not bullet_re.match(lines[0]):
+#                 tmp.append(lines[0])
+#             tmp.extend([bullet_re.sub("", ln, count=1).strip() for ln in lines if bullet_re.match(ln)])
+#             parts = tmp
 
-    # 4) semicolon-separated
-    if len(parts) <= 1 and " ; " in raw:
-        parts = [p.strip() for p in raw.split(" ; ") if p and p.strip()]
+#     # 4) semicolon-separated
+#     if len(parts) <= 1 and " ; " in raw:
+#         parts = [p.strip() for p in raw.split(" ; ") if p and p.strip()]
 
-    # 5) plain newline fallback
-    # If we STILL have just 1 part, but the user gave us multiple non-empty lines,
-    # treat each line as an item. This helps with LLM outputs like:
-    #   "Do X\nDo Y"
-    if len(parts) <= 1:
-        lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
-        if len(lines) > 1:
-            parts = lines
+#     # 5) plain newline fallback
+#     # If we STILL have just 1 part, but the user gave us multiple non-empty lines,
+#     # treat each line as an item. This helps with LLM outputs like:
+#     #   "Do X\nDo Y"
+#     if len(parts) <= 1:
+#         lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+#         if len(lines) > 1:
+#             parts = lines
 
-    return parts if parts else [raw]
+#     return parts if parts else [raw]
 
 
 def _normalize_confidence(confidence: int | float | str) -> int:
@@ -183,7 +183,7 @@ def append_to_scratchpad(
 
     confidence = _normalize_confidence(confidence)
 
-    parts = _split_into_items(proposal_text)
+    parts = [proposal_text]
     added = 0
     for part in parts:
         cleaned = _clean_proposition_text(part)
@@ -323,7 +323,7 @@ def edit_in_scratchpad(
 
     new_confidence = _normalize_confidence(new_confidence)
 
-    parts = _split_into_items(new_proposition_text)
+    parts = [new_proposition_text]
     parts = [_clean_proposition_text(p) for p in parts if _clean_proposition_text(p)]
 
     if not parts:

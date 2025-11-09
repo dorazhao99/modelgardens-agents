@@ -141,6 +141,13 @@ def get_user_description() -> str:
     cfg = load_user_yaml()
     return cfg.get("description", "")
 
+def get_user_agent_goals() -> str:
+    """
+    Return the user's agent-goals/preferences from user.yaml.
+    """
+    cfg = load_user_yaml()
+    return cfg.get("agent_goals", "")
+
 def get_user_profile() -> str:
     """
     Return the user profile from user.yaml.
@@ -148,4 +155,12 @@ def get_user_profile() -> str:
     cfg = load_user_yaml()
     name = cfg.get("name", "")
     description = cfg.get("description", "")
-    return f"Name: {name}\nDescription: {description}"
+    agent_goals = cfg.get("agent_goals", "")
+    parts: list[str] = []
+    if name:
+        parts.append(f"Name: {name}")
+    if description:
+        parts.append(f"Description: {description}")
+    if agent_goals:
+        parts.append(f"Agent Goals (Things this user wants the agent to focus on; not exhaustive): {agent_goals}")
+    return "\n".join(parts)

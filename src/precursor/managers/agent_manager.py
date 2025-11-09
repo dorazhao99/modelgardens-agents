@@ -50,7 +50,7 @@ class AgentManager:
             }
 
         # 2) run feasibility on it
-        results = self.feasibility_estimator(project_scratchpad=scratchpad_text)
+        results = self.feasibility_estimator(project_name=project_name)
 
         # 3) pick high-feasibility ones
         candidates = [

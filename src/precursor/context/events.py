@@ -31,6 +31,7 @@ class ContextEvent:
     # identity / profile
     user_name: Optional[str] = None
     user_description: Optional[str] = None  # from user.yaml
+    user_agent_goals: Optional[str] = None  # from user.yaml
 
     # structured context
     calendar_events: Optional[str] = None

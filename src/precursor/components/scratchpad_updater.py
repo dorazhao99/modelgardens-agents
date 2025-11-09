@@ -146,20 +146,21 @@ Guidelines by Section
   - Focus on steps that increase clarity, reduce friction, or meaningfully advance the research or engineering process — ideally things that a human would appreciate having ‘already done.’
 
 ========================
-Confidence Management
+Confidence Management (Important; Please Read Carefully)
 ========================
 - Every entry should include a **confidence score** from 0–10.  
 - **Start low (1–3)** when adding new items — this reflects an initial observation.  
 - If you later see the same fact or behavior again, **update confidence upward** (e.g., 5–7).  
 - Only mark high confidence (8–10) when a pattern has been repeatedly confirmed.  
 - This gradual reinforcement helps the agent learn which propositions are stable.
+- It is also possible that we are updating the incorrect project scratchpad.  This is why it is so important to start with low confidence because it allows us to later remove low confident/incorrect entries.
 
 ========================
 General Guidance
 ========================
 - Keep entries concise and avoid duplicates.  
 - Aim for diversity across sections when updating.  
-- If no new information is available, it’s fine to only add a short Note.  
+- If no new information is available, it’s fine to only add a short Note or even skip editing entirely.
 - Move outdated or finished Ongoing Objectives to Completed Objectives as evidence builds.  
 - **Add only one proposition per edit call.** For multiple changes, call the tools separately.  
 

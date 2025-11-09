@@ -14,7 +14,7 @@ from gum.observers import Screen
 
 from precursor.context.events import ContextEvent
 from precursor.context.utils import grab_screen_dspy_image
-from precursor.config.loader import get_user_name, get_user_profile
+from precursor.config.loader import get_user_name, get_user_description, get_user_agent_goals
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -42,7 +42,8 @@ class GumSource:
         capture_screenshot: bool = True,
     ) -> None:
         self.user_name = get_user_name()
-        self.user_description = get_user_profile()
+        self.user_description = get_user_description()
+        self.user_agent_goals = get_user_agent_goals()
         self.model = model or os.getenv("GUM_MODEL") or "gpt-4o-mini-2024-07-18"
         self.poll_calendar_days = poll_calendar_days
         self.max_batch_size = max_batch_size
@@ -84,6 +85,7 @@ class GumSource:
                     screenshot=screenshot,
                     user_name=self.user_name,
                     user_description=self.user_description,
+                    user_agent_goals=self.user_agent_goals,
                     recent_propositions=recent_propositions,  # same as user_details
                     calendar_events=calendar_events,
                     raw=update,
