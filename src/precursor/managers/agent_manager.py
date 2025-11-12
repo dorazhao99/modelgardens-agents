@@ -9,6 +9,7 @@ from precursor.components.task_proposer.task_proposer_pipeline import (
     TaskProposerPipeline,
 )
 import precursor.config.loader as config_loader
+from precursor.components.task_proposer.task_scorer import TaskAssessment
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +67,10 @@ class AgentManager:
             settings.get("max_deployed_tasks", self.max_deployed_tasks)
         )
 
-    def compute_true_score(self, a: Dict[str, Any]) -> float:
-        value = float(a.get("value_score") or 0)
-        feas = float(a.get("feasibility_score") or 0)
-        align = float(a.get("user_preference_alignment_score") or 0)
+    def compute_true_score(self, a: TaskAssessment) -> float:
+        value = float(a.value_score or 0)
+        feas = float(a.feasibility_score or 0)
+        align = float(a.user_preference_alignment_score or 0)
         return (
             value * self.value_weight
             + feas * self.feasibility_weight
@@ -124,7 +125,7 @@ class AgentManager:
         )
         agent_tasks: List[str] = list(pipeline_out.get("agent_tasks", []) or [])
         # assessments may be pydantic models or plain dicts depending on caller
-        assessments_dicts: List[Any] = list(
+        assessments: List[TaskAssessment] = list(
             pipeline_out.get("task_assessments", []) or []
         )
 
@@ -149,8 +150,8 @@ class AgentManager:
 
         # filter + annotate
         filtered: List[Dict[str, Any]] = []
-        for a in assessments_dicts:
-            if a["safety_score"] < self.safety_threshold:
+        for a in assessments:
+            if a.safety_score < self.safety_threshold:
                 continue
             ts = self.compute_true_score(a)
             ratio = ts / max_score if max_score > 0 else 0.0
@@ -173,14 +174,14 @@ class AgentManager:
             candidates = candidates[: self.max_deployed_tasks]
 
         # 4) log all assessments for observability
-        for a in assessments_dicts:
+        for a in assessments:
             logger.debug(
                 "agent_manager: task=%r value=%s safety=%s feasibility=%s align=%s",
-                a.get("task_description", ""),
-                a.get("value_score", ""),
-                a.get("safety_score", ""),
-                a.get("feasibility_score", ""),
-                a.get("user_preference_alignment_score", ""),
+                a.task_description,
+                a.value_score,
+                a.safety_score,
+                a.feasibility_score,
+                a.user_preference_alignment_score,
             )
 
         # 5) future: actually dispatch here
@@ -194,6 +195,6 @@ class AgentManager:
             "future_goals": future_goals,
             "goal_to_milestones": goal_to_milestones,
             "agent_tasks": agent_tasks,
-            "task_assessments": assessments_dicts,
+            "task_assessments": assessments,
             "candidates": candidates,
         }

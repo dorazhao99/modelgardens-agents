@@ -18,7 +18,7 @@ i.e. "we were on Alpha from when we first saw Alpha until we started Beta".
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Callable
 import logging
 
 from precursor.context.project_history import ProjectHistory, ProjectReading
@@ -35,11 +35,13 @@ class ProjectTransitionObserver:
         agent_manager: AgentManager,
         min_entries_per_segment: int = 3,
         min_segment_duration: timedelta = timedelta(minutes=10),
+        on_candidates: Optional[Callable[[str, dict], None]] = None,
     ) -> None:
         self.history = history
         self.agent_manager = agent_manager
         self.min_entries_per_segment = min_entries_per_segment
         self.min_segment_duration = min_segment_duration
+        self.on_candidates = on_candidates
 
         # prevent re-firing on the same boundary
         self._last_triggered_key: Optional[str] = None
@@ -90,7 +92,9 @@ class ProjectTransitionObserver:
         )
 
         # real agent manager hook
-        self.agent_manager.run_for_project(prev_project)
+        result = self.agent_manager.run_for_project(prev_project)
+        if self.on_candidates is not None:
+            self.on_candidates(prev_project, result)
 
         self._last_triggered_key = seg_key
 

@@ -90,7 +90,7 @@ class TaskProposerPipeline(dspy.Module):
                         project_scratchpad=project_scratchpad,
                         project_description=project_description,
                         high_level_goal=g,
-                    ).with_inputs("user_profile", "project_name", "project_scratchpad", "project_description", "high_level_goals")
+                    ).with_inputs("user_profile", "project_name", "project_scratchpad", "project_description", "high_level_goal")
                 )
                 goals_order.append(g)
             ms_out = self.milestone.batch(batch_inputs, disable_progress_bar=True)

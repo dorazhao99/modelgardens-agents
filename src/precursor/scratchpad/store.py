@@ -22,6 +22,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import json
 
 from platformdirs import user_data_dir
 
@@ -95,6 +96,7 @@ def init_db() -> None:
             message TEXT NOT NULL,
             confidence INTEGER DEFAULT 0,
             status TEXT DEFAULT 'active',
+            metadata_json TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
         """
@@ -165,12 +167,31 @@ def _normalize_section_and_subsection(
 # Core CRUD (id-based)
 # ============================================================================
 
+def _safe_parse_metadata(metadata_json: Optional[str]) -> Dict[str, Any]:
+    if not metadata_json:
+        return {}
+    try:
+        parsed = json.loads(metadata_json)
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
+
+
+def _row_to_public_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    d = dict(row)
+    mj = d.get("metadata_json")
+    d["metadata"] = _safe_parse_metadata(mj)
+    if "metadata_json" in d:
+        del d["metadata_json"]
+    return d
+
 def add_entry(
     project_name: str,
     section: str,
     message: str,
     confidence: int = 0,
     subsection: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> int:
     """
     Append a new line to a project's scratchpad.
@@ -187,6 +208,9 @@ def add_entry(
         Confidence score to display alongside the message.
     subsection : Optional[str]
         For "Project Resources", the finer-grained bucket.
+    metadata : Optional[Dict[str, Any]]
+        metadata is optional, stored as JSON, and not rendered.
+        Use it for hidden details like long summaries, URIs, or task data.
 
     Returns
     -------
@@ -201,10 +225,17 @@ def add_entry(
     conn = get_conn()
     cur = conn.execute(
         """
-        INSERT INTO scratchpad_entries (project_name, section, subsection, message, confidence)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO scratchpad_entries (project_name, section, subsection, message, confidence, metadata_json)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (project_name, section, subsection, message, confidence),
+        (
+            project_name,
+            section,
+            subsection,
+            message,
+            confidence,
+            json.dumps(metadata, ensure_ascii=False) if metadata is not None else None,
+        ),
     )
     conn.commit()
     entry_id = cur.lastrowid
@@ -241,7 +272,7 @@ def list_entries(
             (project_name,),
         ).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    return [_row_to_public_dict(r) for r in rows]
 
 
 def list_resource_entries(
@@ -257,12 +288,24 @@ def update_entry(
     entry_id: int,
     new_message: str,
     new_confidence: Optional[int] = None,
+    new_metadata: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Update an entry by its internal database id.
+    metadata is optional, stored as JSON, and not rendered.
+    Use it for hidden details like long summaries, URIs, or task data.
     """
     conn = get_conn()
-    if new_confidence is not None:
+    if new_confidence is not None and new_metadata is not None:
+        conn.execute(
+            """
+            UPDATE scratchpad_entries
+            SET message = ?, confidence = ?, metadata_json = ?
+            WHERE id = ?
+            """,
+            (new_message, new_confidence, json.dumps(new_metadata, ensure_ascii=False), entry_id),
+        )
+    elif new_confidence is not None:
         conn.execute(
             """
             UPDATE scratchpad_entries
@@ -270,6 +313,15 @@ def update_entry(
             WHERE id = ?
             """,
             (new_message, new_confidence, entry_id),
+        )
+    elif new_metadata is not None:
+        conn.execute(
+            """
+            UPDATE scratchpad_entries
+            SET message = ?, metadata_json = ?
+            WHERE id = ?
+            """,
+            (new_message, json.dumps(new_metadata, ensure_ascii=False), entry_id),
         )
     else:
         conn.execute(
@@ -356,7 +408,7 @@ def get_entry_by_display_index(
     if display_index < 0 or display_index >= len(rows):
         return None
 
-    return dict(rows[display_index])
+    return _row_to_public_dict(rows[display_index])
 
 
 def update_entry_by_display_index(
@@ -366,6 +418,7 @@ def update_entry_by_display_index(
     new_message: str,
     new_confidence: Optional[int] = None,
     subsection: Optional[str] = None,
+    new_metadata: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """
     Update an entry by its human/LLM-facing index.
@@ -377,7 +430,7 @@ def update_entry_by_display_index(
     )
     if not row:
         return False
-    update_entry(row["id"], new_message, new_confidence)
+    update_entry(row["id"], new_message, new_confidence, new_metadata)
     return True
 
 

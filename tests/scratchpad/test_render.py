@@ -53,3 +53,26 @@ def test_render_all_sections_present_even_if_empty(scratchpad_test_env):
     assert "## Notes" in text
     assert "## Project Resources" in text
     assert "## Next Steps" in text
+
+
+def test_render_ignores_metadata_content(scratchpad_test_env):
+    import precursor.scratchpad.store as store
+    import precursor.scratchpad.render as render
+
+    project = "Test Project Alpha"
+    store.init_db()
+
+    # Add entry with hidden metadata; renderer should not include metadata values
+    store.add_entry(
+        project,
+        "Notes",
+        "Created release doc",
+        7,
+        metadata={"uri": "drive://abc", "long_summary": "Outlined results"},
+    )
+
+    text = render.render_project_scratchpad(project)
+    assert "Created release doc" in text
+    # Ensure metadata values are not rendered
+    assert "drive://abc" not in text
+    assert "Outlined results" not in text

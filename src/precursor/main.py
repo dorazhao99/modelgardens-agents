@@ -68,6 +68,49 @@ class _CsvLogger:
                 }
             )
 
+class _AgentCsvLogger:
+    """
+    Append candidate tasks selected by AgentManager to a CSV.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._header_written = self.path.exists() and self.path.stat().st_size > 0
+
+    def log_candidates(self, *, project: str, result: Dict[str, Any]) -> None:
+        fieldnames = [
+            "project",
+            "task_description",
+            "value_score",
+            "feasibility_score",
+            "safety_score",
+            "user_preference_alignment_score",
+            "true_score",
+            "score_ratio",
+        ]
+        candidates = result.get("candidates", []) or []
+        if not candidates:
+            return
+        with self.path.open("a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            if not self._header_written:
+                writer.writeheader()
+                self._header_written = True
+            for c in candidates:
+                writer.writerow(
+                    {
+                        "project": project,
+                        "task_description": c.get("task_description", ""),
+                        "value_score": c.get("value_score", ""),
+                        "feasibility_score": c.get("feasibility_score", ""),
+                        "safety_score": c.get("safety_score", ""),
+                        "user_preference_alignment_score": c.get("user_preference_alignment_score", ""),
+                        "true_score": c.get("_true_score", ""),
+                        "score_ratio": c.get("_score_ratio", ""),
+                    }
+                )
+
 
 def _resolve_scratchpad_db_path(mode: str) -> Path:
     """
@@ -190,6 +233,11 @@ async def main() -> None:
         help="If set, log each processed event + final scratchpad to this CSV.",
     )
     parser.add_argument(
+        "--agent-output-csv",
+        default=None,
+        help="If set, log candidate tasks selected by AgentManager to this CSV.",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
     )
@@ -225,17 +273,26 @@ async def main() -> None:
     history = ProjectHistory()
     state_mgr = StateManager(history=history)
     agent_mgr = AgentManager()
+
+    # optional CSV logger
+    csv_logger: Optional[_CsvLogger] = None
+    agent_csv_logger: Optional[_AgentCsvLogger] = None
+    if args.output_csv:
+        csv_logger = _CsvLogger(Path(args.output_csv))
+    if args.agent_output_csv:
+        agent_csv_logger = _AgentCsvLogger(Path(args.agent_output_csv))
+
     transition_obs = ProjectTransitionObserver(
         history=history,
         agent_manager=agent_mgr,
         min_entries_per_segment=3,
         min_segment_duration=timedelta(minutes=3),
+        on_candidates=(
+            (lambda project, result: agent_csv_logger.log_candidates(project=project, result=result))
+            if agent_csv_logger is not None
+            else None
+        ),
     )
-
-    # optional CSV logger
-    csv_logger: Optional[_CsvLogger] = None
-    if args.output_csv:
-        csv_logger = _CsvLogger(Path(args.output_csv))
 
     # run
     if args.mode == "gum":
@@ -256,3 +313,10 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+# Example usage:
+# Full (GUM) run with both logs:
+#   python -m precursor.main --mode gum --output-csv dev/survey/pipeline_run.csv --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv --log-level INFO
+#
+# CSV replay with fast mode and both logs:
+#   python -m precursor.main --mode csv --csv-path dev/survey/context_log.csv --fast --output-csv dev/survey/pipeline_run.csv --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv --log-level INFO
