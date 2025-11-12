@@ -81,7 +81,7 @@ class FutureGoalInducerModule(dspy.Module):
     DSPy module that induces future high-level goals for a project, mirroring
     the structure used in the feasibility estimator.
     """
-    def __init__(self, *, max_scratchpad_chars: int = 8000) -> None:
+    def __init__(self, *, max_scratchpad_chars: int = 12000) -> None:
         super().__init__()
         self.inducer = dspy.ChainOfThought(FutureGoalInducer)
         self.max_scratchpad_chars = max_scratchpad_chars
