@@ -244,6 +244,13 @@ NOTE: The agent is pretty capable with skills so you should be asking yourself "
 - **3–1:** Misaligned — outside user’s focus or contradicts their intended workflow.
 - **0:** Antagonistic — counterproductive to user’s goals or trust.
 
+**Incorporating prior agent feedback:**
+- Review the “Agent Completed Tasks” sections of the project scratchpad:
+    - **Accepted Agent Completed Tasks** indicate what the user *appreciated* — these patterns should increase alignment.
+    - **Rejected Agent Completed Tasks** reflect directions the user *did not want* — these should decrease alignment.
+- If no feedback is available, proceed normally.
+- Treat these sections as direct evidence of what the user considers aligned or misaligned behavior.
+
 ========================
 Output requirements
 ========================

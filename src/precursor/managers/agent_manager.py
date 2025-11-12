@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from precursor.scratchpad import render as scratchpad_render
-from precursor.components.feasibility_estimator import FeasibilityEstimator
+from precursor.components.task_proposer.task_proposer_pipeline import (
+    TaskProposerPipeline,
+)
+import precursor.config.loader as config_loader
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +17,8 @@ class AgentManager:
     """
     Given a project name:
       1. load its scratchpad
-      2. run feasibility over the actions we can see in that scratchpad
-      3. return / log high-feasibility actions
+      2. run TaskProposerPipeline to propose tasks and score them
+      3. return / log high-priority candidate actions (filtered/sorted)
       4. (future) dispatch agents for those actions
 
     This is intentionally small and opinionated.
@@ -24,66 +27,173 @@ class AgentManager:
     def __init__(
         self,
         *,
-        feasibility_estimator: Optional[FeasibilityEstimator] = None,
-        feasibility_threshold: int = 7,
+        task_pipeline: Optional[TaskProposerPipeline] = None,
     ) -> None:
-        self.feasibility_estimator = feasibility_estimator or FeasibilityEstimator()
-        self.feasibility_threshold = feasibility_threshold
+        # dspy.Module – creates goals, milestones, tasks, and assessments
+        self.task_pipeline = task_pipeline or TaskProposerPipeline()
+        # load settings for scoring/selection
+        settings = config_loader.get_settings() or {}
+        self.value_weight: float = float(settings.get("value_weight", 2.0))
+        self.feasibility_weight: float = float(settings.get("feasibility_weight", 1.5))
+        self.user_pref_alignment_weight: float = float(
+            settings.get("user_preference_alignment_weight", 0.5)
+        )
+        self.safety_threshold: int = int(settings.get("safety_threshold", 7))
+        self.deployment_threshold: float = float(
+            settings.get("deployment_threshold", 0.9)
+        )
+        self.max_deployed_tasks: int = int(settings.get("max_deployed_tasks", 3))
 
-    def run_for_project(self, project_name: str) -> dict:
+    def _refresh_settings(self) -> None:
         """
-        Main entrypoint: run feasibility for this project right now.
+        Reload weights/thresholds from settings.yaml to adapt to live edits.
+        """
+        settings = config_loader.get_settings() or {}
+        self.value_weight = float(settings.get("value_weight", self.value_weight))
+        self.feasibility_weight = float(
+            settings.get("feasibility_weight", self.feasibility_weight)
+        )
+        self.user_pref_alignment_weight = float(
+            settings.get(
+                "user_preference_alignment_weight", self.user_pref_alignment_weight
+            )
+        )
+        self.safety_threshold = int(settings.get("safety_threshold", self.safety_threshold))
+        self.deployment_threshold = float(
+            settings.get("deployment_threshold", self.deployment_threshold)
+        )
+        self.max_deployed_tasks = int(
+            settings.get("max_deployed_tasks", self.max_deployed_tasks)
+        )
+
+    def compute_true_score(self, a: Dict[str, Any]) -> float:
+        value = float(a.get("value_score") or 0)
+        feas = float(a.get("feasibility_score") or 0)
+        align = float(a.get("user_preference_alignment_score") or 0)
+        return (
+            value * self.value_weight
+            + feas * self.feasibility_weight
+            + align * self.user_pref_alignment_weight
+        )
+
+    def run_for_project(
+        self,
+        project_name: str,
+        *,
+        user_profile: str = "",
+        project_description: Optional[str] = None,
+        user_agent_goals: Optional[str] = None,
+    ) -> dict:
+        """
+        Main entrypoint: propose and score background-agent tasks for this project.
         """
         logger.info("agent_manager: running for project %s", project_name)
+
+        # Always refresh settings so live edits to YAML take effect
+        self._refresh_settings()
 
         # 1) get latest scratchpad
         scratchpad_text = scratchpad_render.render_project_scratchpad(project_name)
         if not scratchpad_text.strip():
             logger.warning(
-                "agent_manager: project %s has empty scratchpad, skipping feasibility",
+                "agent_manager: project %s has empty scratchpad, skipping task proposal",
                 project_name,
             )
             return {
                 "project": project_name,
-                "actions": [],
+                "future_goals": [],
+                "goal_to_milestones": {},
+                "agent_tasks": [],
+                "task_assessments": [],
                 "candidates": [],
             }
 
-        # 2) run feasibility on it
-        results = self.feasibility_estimator(project_name=project_name)
+        # 2) run the task proposer pipeline
+        
+        pipeline_out: Dict[str, Any] = self.task_pipeline(
+            user_profile=user_profile,
+            project_name=project_name,
+            project_scratchpad=scratchpad_text,
+            project_description=project_description,
+            user_agent_goals=user_agent_goals,
+        )
+        
+        future_goals: List[str] = list(pipeline_out.get("future_goals", []) or [])
+        goal_to_milestones: Dict[str, List[str]] = dict(
+            pipeline_out.get("goal_to_milestones", {}) or {}
+        )
+        agent_tasks: List[str] = list(pipeline_out.get("agent_tasks", []) or [])
+        # assessments may be pydantic models or plain dicts depending on caller
+        assessments_dicts: List[Any] = list(
+            pipeline_out.get("task_assessments", []) or []
+        )
 
-        # 3) pick high-feasibility ones
-        candidates = [
-            r for r in results
-            if getattr(r, "feasibility", 0) >= self.feasibility_threshold
+        # 3) weighted scoring + selection per settings.yaml
+        #    - compute true score and ratio
+        #    - filter by safety threshold
+        #    - filter by ratio >= deployment_threshold
+        #    - sort by true score desc; tie-break by weight order (highest weight first)
+        max_score = 10.0 * (
+            self.value_weight + self.feasibility_weight + self.user_pref_alignment_weight
+        )
+
+        # Determine tie-break order dynamically by descending weight
+        tie_break_fields: List[str] = []
+        weights: List[tuple[str, float]] = [
+            ("value_score", self.value_weight),
+            ("feasibility_score", self.feasibility_weight),
+            ("user_preference_alignment_score", self.user_pref_alignment_weight),
         ]
+        for field, _ in sorted(weights, key=lambda x: -x[1]):
+            tie_break_fields.append(field)
 
-        # 4) log them
-        for r in results:
+        # filter + annotate
+        filtered: List[Dict[str, Any]] = []
+        for a in assessments_dicts:
+            if a["safety_score"] < self.safety_threshold:
+                continue
+            ts = self.compute_true_score(a)
+            ratio = ts / max_score if max_score > 0 else 0.0
+            if ratio < self.deployment_threshold:
+                continue
+            b = dict(a)
+            b["_true_score"] = ts
+            b["_score_ratio"] = ratio
+            filtered.append(b)
+
+        # sort by true score desc, then tie-break by the configured order
+        def sort_key(a: Dict[str, Any]) -> tuple:
+            tie = tuple(-(a.get(f) or 0) for f in tie_break_fields)
+            return (-(a.get("_true_score") or 0.0),) + tie
+
+        candidates = sorted(filtered, key=sort_key)
+
+        # final cap
+        if self.max_deployed_tasks > 0 and len(candidates) > self.max_deployed_tasks:
+            candidates = candidates[: self.max_deployed_tasks]
+
+        # 4) log all assessments for observability
+        for a in assessments_dicts:
             logger.debug(
-                "agent_manager: action=%r feasibility=%s missing=%r",
-                getattr(r, "action", ""),
-                getattr(r, "feasibility", ""),
-                getattr(r, "missing_context", None),
+                "agent_manager: task=%r value=%s safety=%s feasibility=%s align=%s",
+                a.get("task_description", ""),
+                a.get("value_score", ""),
+                a.get("safety_score", ""),
+                a.get("feasibility_score", ""),
+                a.get("user_preference_alignment_score", ""),
             )
 
         # 5) future: actually dispatch here
         # -------------------------------------------------
-        # for c in candidates:
-        #     launch_agent_for_action(
-        #         project_name=project_name,
-        #         action=c.action,
-        #         scratchpad=scratchpad_text,
-        #     )
+        # for c in candidates: ...
         # -------------------------------------------------
 
         # return structured so tests / callers can inspect
         return {
             "project": project_name,
-            "actions": [
-                r.model_dump() if hasattr(r, "model_dump") else r for r in results
-            ],
-            "candidates": [
-                c.model_dump() if hasattr(c, "model_dump") else c for c in candidates
-            ],
+            "future_goals": future_goals,
+            "goal_to_milestones": goal_to_milestones,
+            "agent_tasks": agent_tasks,
+            "task_assessments": assessments_dicts,
+            "candidates": candidates,
         }

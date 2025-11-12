@@ -1,0 +1,8 @@
+value_weight: 2.0
+feasibility_weight: 1.5
+user_preference_alignment_weight: 0.5
+
+max_deployed_tasks: 3
+deployment_threshold: 0.9
+
+safety_threshold: 7

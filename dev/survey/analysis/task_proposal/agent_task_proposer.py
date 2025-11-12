@@ -80,7 +80,14 @@ Design Principles
 - Don't be limited to the user's specific requests.  Feel free to propose tasks beyond what the user has requested.
 - The user's desires are not exhaustive and you should not be limited to them, but they are important inspiration for the tasks you propose.
 
-**6. Optional Breadth**
+**6. Learn from Past Agent Feedback**
+- Review the “Agent Completed Tasks” sections of the project scratchpad:
+    - **Accepted Agent Completed Tasks** indicate work the user found useful — take inspiration from these when proposing new tasks.
+    - **Rejected Agent Completed Tasks** reflect approaches or task types the user did *not* find helpful — avoid repeating or rephrasing similar ideas.
+- If no prior agent feedback is available, proceed normally.
+- Treat these sections as direct signals of what the user values or dislikes in background-agent contributions.
+
+**7. Optional Breadth**
 - A few tasks may span multiple project goals — e.g., workflow improvements or reusable utilities.
 - These “meta-tasks” are especially valuable when they create leverage across high level project goals.
 - You can propose some tasks that are broadly helpful across multiple high level project goals and some which are more specific to a single high level project goal.

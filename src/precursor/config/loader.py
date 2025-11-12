@@ -105,6 +105,13 @@ def load_mcp_servers_yaml() -> Dict[str, Any]:
     path = _resolve_yaml_path("mcp_servers.yaml", env_var="PRECURSOR_MCP_SERVERS_FILE")
     return _load_yaml(path)
 
+def load_settings_yaml() -> Dict[str, Any]:
+    """
+    Load `settings.yaml`, using PRECURSOR_SETTINGS_FILE if set.
+    """
+    path = _resolve_yaml_path("settings.yaml", env_var="PRECURSOR_SETTINGS_FILE")
+    return _load_yaml(path)
+
 
 # ---------------------------------------------------------------------------
 # convenience helpers
@@ -164,3 +171,9 @@ def get_user_profile() -> str:
     if agent_goals:
         parts.append(f"Agent Goals (Things this user wants the agent to focus on; not exhaustive): {agent_goals}")
     return "\n".join(parts)
+
+def get_settings() -> Dict[str, Any]:
+    """
+    Return settings from settings.yaml.
+    """
+    return load_settings_yaml()
