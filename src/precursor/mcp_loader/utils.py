@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, List
 import yaml
 from mcp2py import load as mcp2py_load
 from precursor.config.loader import get_user_name
-
+from platformdirs import user_data_dir
 
 # ----------------------------
 # YAML loading (explicit path)
@@ -44,6 +44,17 @@ def apply_env(spec: Dict[str, Any]) -> None:
         user_name = get_user_name()
         if user_name:
             os.environ["USER_NAME"] = user_name
+
+    # Default SLIDEV_DIR for the slides server if not explicitly provided
+    if (spec.get("id") or "").lower() == "slides":
+        if not os.environ.get("SLIDEV_DIR"):
+            default_dir = os.path.join(user_data_dir(appname="precursor", appauthor="precursor", version=None), "slides")
+
+            if not os.path.exists(default_dir):
+                os.makedirs(default_dir, exist_ok=True)
+
+            # Do not create directories here; the Node server ensures existence on boot
+            os.environ["SLIDEV_DIR"] = str(default_dir)
 
 
 # ----------------------------

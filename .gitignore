@@ -208,3 +208,8 @@ __marimo__/
 
 credentials.json
 token.pickle
+
+node_modules/
+dist/
+.DS_Store
+package-lock.json

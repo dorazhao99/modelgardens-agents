@@ -58,3 +58,7 @@ servers:
   - id: websearch
     load: "npx -y @brave/brave-search-mcp-server --transport stdio"
     enabled: true
+
+  - id: slides
+    load: "node src/precursor/mcp_servers/slides/src/index.js"
+    enabled: true
