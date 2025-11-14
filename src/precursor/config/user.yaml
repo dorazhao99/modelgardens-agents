@@ -2,14 +2,10 @@
 # ---------------------------------------------------------------------------
 # User profile / preferences
 # ---------------------------------------------------------------------------
-# This file is meant for LLM-facing components that want to tailor behavior
-# to *you* (priorities, personality, preferences, etc).
-# ---------------------------------------------------------------------------
-
 name: "Michael Ryan"
 description: |
   I am a CS PhD student (NLP) at Stanford.  
-  I work across several concurrent research projects.  
+  I work across several concurrent research projects.
   I am interested in building personalized LLM tooling.
 agent_goals: |
   I am interested in an agent that can help organize my work.

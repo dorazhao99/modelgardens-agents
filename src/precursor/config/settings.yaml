@@ -1,3 +1,12 @@
+# config/settings.yaml
+# ---------------------------------------------------------------------------
+# Settings for the system as a whole.
+# ---------------------------------------------------------------------------
+# This file is meant for settings that are used to configure the system.
+# In particular the value, feasibility, safety, and user_preference alignment
+# decide which tasks are considered for deployment.  The deployment threshold
+# ---------------------------------------------------------------------------
+
 value_weight: 2.0
 feasibility_weight: 1.5
 user_preference_alignment_weight: 0.5
