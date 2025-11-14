@@ -1,94 +1,79 @@
-# src/precursor/core_tools/artifacts.py
+"""
+Artifacts tool.
+
+Record agent-created artifacts into the project's scratchpad using a single line
+message and **hidden metadata**. The visible message is concise (short_summary + URI);
+the longer operational write-up goes into `metadata` (not rendered).
+
+Section used:
+  - "Agent Completed Tasks (Pending Review)"
+
+Docstring clarity matters for DSPy: include precise argument semantics.
+"""
+
 from __future__ import annotations
 from typing import Optional
 
-from precursor.scratchpad import store, render
-from precursor.scratchpad.scratchpad_tools import append_to_scratchpad
+from precursor.scratchpad import store
 
-PENDING_SECTION = "Agent Completed Tasks (Pending Review)"
-
-def log_agent_artifact(
+def store_artifact(
     project_name: str,
-    title: str,
-    summary: Optional[str] = None,
-    artifact_uri: Optional[str] = None,
-    task_completed: Optional[str] = None,
+    task: str,
+    short_description: str,
+    uri: str,
+    step_by_step_summary: Optional[str] = None,
 ) -> str:
-    """
-    Record that an agent has completed a task or produced an artifact
-    for a given project.
+    f"""
+    Store an artifact reference so that the user can review it later.  This is the only way to ensure an artifact will be available for the user to actually interact with.
 
+    IT IS IMPERATIVE that this method is called every time an artifact is created or edited.  This is the ONLY way to ensure an artifact will be available for the user to actually interact with.
+
+    Only call this method once per artifact per task, likely one of the final function calls to make before returning the result to the user.
+    
     Parameters
     ----------
     project_name : str
-        The name of the project this artifact belongs to.
-    title : str
-        A short description of what was completed.
-    summary : str, optional
-        A longer explanation or context for the completed work.
-    artifact_uri : str, optional
-        A link or file path to the generated artifact.
-    task_completed : str, optional
-        If provided, must match a "Next Steps" item exactly.
-        That item will be removed from "Next Steps" before logging
-        the completion.
-
-    Behavior
-    --------
-    - If `task_completed` is provided, remove that task from "Next Steps".
-    - Always add a new entry under
-      "Agent Completed Tasks (Pending Review)".
-    - Confidence is always set to 10.
+        Must match an existing project name.
+    task : str
+        The specific task that the agent was addressing when creating this artifact.
+    short_description : str
+        One-sentence human-readable summary of the artifact (what it is).  Limit technical details and describe in layman's terms.
+    uri : str
+        Pointer/handle to the created/edited resource (e.g., drive url, file path, pr url, etc.).
+    step_by_step_summary : str, optional
+        Hidden operational details about what the agent did to produce this artifact.
+        This is NOT rendered in the scratchpad; it will be stored inside metadata.
 
     Returns
     -------
     str
-        A confirmation message and the updated scratchpad text.
+        A short confirmation string suitable for logging or display.
     """
     store.init_db()
 
-    # Try to remove a Next Step if given
-    removed_note = ""
-    if task_completed:
-        next_steps = store.list_entries(project_name, section="Next Steps")
-        wanted = task_completed.strip()
-        found_index = None
-        for idx, row in enumerate(next_steps):
-            if (row.get("message") or "").strip() == wanted:
-                found_index = idx
-                break
-        if found_index is not None:
-            store.delete_entry_by_display_index(
-                project_name=project_name,
-                section="Next Steps",
-                display_index=found_index,
-            )
-            removed_note = f"(removed Next Steps[{found_index}])"
-        else:
-            removed_note = "(no matching Next Steps found)"
+    visible_message = f"{task} [{short_description}] (uri: {uri})".strip()
+    metadata = {
+        "task": task,
+        "uri": uri,
+        "step_by_step_summary": step_by_step_summary,
+        "short_description": short_description,
+    }
 
-    # Build the entry for the Pending Review section
-    parts = [title]
-    if summary:
-        parts.append(summary)
-    if artifact_uri:
-        parts.append(f"(uri: {artifact_uri})")
-    if task_completed:
-        parts.append(f"(completed: {task_completed.strip()})")
-    if removed_note:
-        parts.append(removed_note)
+    # --- light idempotency: skip if same project+section has same uri+task ---
+    existing = store.list_entries(project_name, section="Agent Completed Tasks (Pending Review)")
+    for row in existing:
+        md = row.get("metadata") or {}
+        if md.get("uri") == uri and md.get("task", "").strip() == task:
+            return f"Artifact already recorded as entry {row['id']} (pending review)."
 
-    line = " - ".join(parts)
-
-    append_to_scratchpad(
+    # We deliberately do not create a separate table; metadata lives per row.
+    entry_id = store.add_entry(
         project_name=project_name,
-        section=PENDING_SECTION,
-        proposal_text=line,
+        section="Agent Completed Tasks (Pending Review)",
+        message=visible_message,
         confidence=10,
+        subsection=None,
+        metadata=metadata,
     )
 
-    updated = render.render_project_scratchpad(project_name)
-    return (
-        "✅ Logged completed artifact to 'Agent Completed Tasks (Pending Review)'.\n\n"
-        "== UPDATED SCRATCHPAD ==\n" + updated
-    )
+    return f"Recorded artifact entry {entry_id} in 'Agent Completed Tasks (Pending Review)'."

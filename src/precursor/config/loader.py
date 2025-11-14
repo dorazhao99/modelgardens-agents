@@ -177,3 +177,29 @@ def get_settings() -> Dict[str, Any]:
     Return settings from settings.yaml.
     """
     return load_settings_yaml()
+
+def load_mcp_servers_yaml() -> Dict[str, Any]:
+    """
+    Load `mcp_servers.yaml`, using PRECURSOR_MCP_SERVERS_FILE if set.
+
+    Expected shape:
+    {
+        "defaults": {
+            "enabled": true,
+            "allow_patterns": ["*"],
+            "deny_patterns": []
+        },
+        "servers": [
+            {
+                "id": "gum",
+                "load": "python -m gumcp",
+                "enabled": true,
+                "env": {},
+                "headers": {}
+            },
+            ...
+        ]
+    }
+    """
+    path = _resolve_yaml_path("mcp_servers.yaml", env_var="PRECURSOR_MCP_SERVERS_FILE")
+    return _load_yaml(path)
