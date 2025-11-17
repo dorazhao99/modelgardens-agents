@@ -15,6 +15,7 @@ from pathlib import Path
 
 import dspy
 from precursor.agents.mcp_agent import MCPAgent
+from precursor.scratchpad import render as scratchpad_render
 
 # Load .env so OPENAI_API_KEY and other secrets are available when launched via python -m
 from dotenv import load_dotenv
@@ -35,7 +36,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Run MCPAgent on a project + task")
     ap.add_argument("--project", required=True, help="Project name (must exist in projects.yaml)")
     ap.add_argument("--task", required=True, help="Primary task description")
-    ap.add_argument("--context", help="Optional path to extra project context (markdown or text)")
+    ap.add_argument(
+        "--context",
+        help="Optional path to extra project context (markdown or text). "
+             "If omitted, the project's scratchpad will be rendered and used.",
+    )
     ap.add_argument("--model", default="openai/gpt-5", help="DSPy model id (e.g., openai/gpt-5)")
     args = ap.parse_args()
 
@@ -43,7 +48,8 @@ def main() -> None:
     lm = dspy.LM(args.model, temperature=1.0, max_tokens=24000)
     dspy.configure(lm=lm)
 
-    project_context = _read_text(args.context)
+    # Prefer provided context file; otherwise render scratchpad for the project
+    project_context = _read_text(args.context) if args.context else scratchpad_render.render_project_scratchpad(args.project)
     agent = MCPAgent(model=lm)
     res = agent.run(
         project_name=args.project,

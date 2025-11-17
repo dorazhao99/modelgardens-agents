@@ -16,6 +16,15 @@ authors = [
 dependencies = [
   "platformdirs",
   "pyyaml",
+  "gum-ai",
+  "python-dotenv",
+  "ics",
+  "aiohttp",
+  "dspy",
+  "pynput",
+  "matplotlib",
+  "pandas",
+  "pydantic"
 ]
 
 [tool.setuptools]

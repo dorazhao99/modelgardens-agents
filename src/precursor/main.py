@@ -15,6 +15,7 @@ from precursor.config.loader import get_user_agent_goals
 from precursor.context.project_history import ProjectHistory
 from precursor.managers.state_manager import StateManager
 from precursor.managers.agent_manager import AgentManager
+from precursor.managers.ui_manager import UIManager
 from precursor.observers.project_transition import ProjectActivityObserver
 from precursor.observers.gum_source import GumSource
 from precursor.observers.csv_simulator import CSVSimulatorObserver, CSVSimulatorConfig
@@ -129,6 +130,7 @@ def _resolve_scratchpad_db_path(mode: str) -> Path:
 async def _run_gum_mode(
     state_mgr: StateManager,
     transition_obs: ProjectActivityObserver,
+    return_obs: ProjectActivityObserver,
     max_steps: Optional[int],
     csv_logger: Optional[_CsvLogger],
 ) -> None:
@@ -138,6 +140,7 @@ async def _run_gum_mode(
         nonlocal processed
         result = state_mgr.process_event(event)
         transition_obs.handle_processed()
+        return_obs.handle_processed()
 
         if csv_logger is not None:
             csv_logger.log(event, result)
@@ -155,6 +158,7 @@ async def _run_gum_mode(
 async def _run_csv_mode(
     state_mgr: StateManager,
     transition_obs: ProjectActivityObserver,
+    return_obs: ProjectActivityObserver,
     csv_path: str,
     interval_seconds: float,
     fast: bool,
@@ -167,6 +171,7 @@ async def _run_csv_mode(
         nonlocal processed
         result = state_mgr.process_event(event)
         transition_obs.handle_processed()
+        return_obs.handle_processed()
 
         if csv_logger is not None:
             csv_logger.log(event, result)
@@ -246,6 +251,11 @@ async def main() -> None:
         default="openai/gpt-5-mini",
         help="Language model identifier to use with dspy (e.g., 'openai/gpt-4o-mini').",
     )
+    parser.add_argument(
+        "--no-deploy",
+        action="store_true",
+        help="Disable deployment; only score/log tasks (default: deploy enabled).",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -272,7 +282,8 @@ async def main() -> None:
     # build core objects
     history = ProjectHistory()
     state_mgr = StateManager(history=history)
-    agent_mgr = AgentManager()
+    agent_mgr = AgentManager(deploy_enabled=not args.no_deploy)
+    ui_mgr = UIManager()
 
     # optional CSV logger
     csv_logger: Optional[_CsvLogger] = None
@@ -295,16 +306,27 @@ async def main() -> None:
             else None
         ),
     )
+    # Arrival observer → calls UIManager, which will notify only if pending tasks exist.
+    return_obs = ProjectActivityObserver(
+        history=history,
+        agent_manager=ui_mgr,
+        mode="arrival",
+        window_size=20,
+        min_entries_current_segment=1,
+        time_threshold=timedelta(minutes=15),
+        on_trigger=None,
+    )
 
     # run
     if args.mode == "gum":
         logger.info("starting in GUM mode")
-        await _run_gum_mode(state_mgr, transition_obs, args.max_steps, csv_logger)
+        await _run_gum_mode(state_mgr, transition_obs, return_obs, args.max_steps, csv_logger)
     else:
         logger.info("starting in CSV mode (%s)", args.csv_path)
         await _run_csv_mode(
             state_mgr,
             transition_obs,
+            return_obs,
             csv_path=args.csv_path,
             interval_seconds=args.interval_seconds,
             fast=args.fast,
@@ -321,4 +343,4 @@ if __name__ == "__main__":
 #   python -m precursor.main --mode gum --output-csv dev/survey/pipeline_run.csv --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv --log-level INFO
 #
 # CSV replay with fast mode and both logs:
-#   python -m precursor.main --mode csv --csv-path dev/survey/context_log.csv --fast --output-csv dev/survey/pipeline_run_no_next_steps.csv --agent-output-csv dev/survey/pipeline_run_no_next_steps.agent_candidates.csv --log-level INFO --force-reset --max-steps 25
+#   python -m precursor.main --mode csv --csv-path dev/survey/context_log.csv --fast --output-csv dev/survey/pipeline_run_no_next_steps.csv --agent-output-csv dev/survey/pipeline_run_no_next_steps.agent_candidates.csv --log-level INFO --force-reset --max-steps 25 --no-deploy

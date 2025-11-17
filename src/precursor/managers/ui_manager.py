@@ -6,6 +6,7 @@ import logging
 from typing import Dict, Any, Optional
 
 import precursor
+from precursor.scratchpad import store
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,21 @@ class UIManager:
         if not (swift_root / "Package.swift").exists():
             raise RuntimeError(f"PrecursorApp Swift package not found at {swift_root}")
         return swift_root
+
+    def _has_pending_agent_tasks(self, project_name: str) -> bool:
+        """
+        Check whether the scratchpad has entries in
+        'Agent Completed Tasks (Pending Review)'.
+        """
+        try:
+            store.init_db()
+            rows = store.list_entries(
+                project_name, section="Agent Completed Tasks (Pending Review)"
+            )
+            return bool(rows)
+        except Exception:
+            logger.exception("ui_manager: failed to read scratchpad entries")
+            return False
 
     def _notify_precursor_for_project(self, project_name: str) -> None:
         """
@@ -105,15 +121,22 @@ class UIManager:
         """
         logger.info("ui_manager: run_for_project (notify project return) → %s", project_name)
 
-        try:
-            self._notify_precursor_for_project(project_name)
-        except Exception:
-            logger.exception("ui_manager: failed to send macOS notification")
+        # Only notify if there are pending agent-completed tasks to review.
+        if self._has_pending_agent_tasks(project_name):
+            try:
+                self._notify_precursor_for_project(project_name)
+            except Exception:
+                logger.exception("ui_manager: failed to send macOS notification")
+        else:
+            logger.info(
+                "ui_manager: skipping notification for %s (no pending agent-completed tasks)",
+                project_name,
+            )
 
         return {
             "project": project_name,
             "notification": {
-                "type": "project_return",
+                "type": "project_return_if_pending",
                 "message": f"Welcome back to {project_name}.",
             },
         }

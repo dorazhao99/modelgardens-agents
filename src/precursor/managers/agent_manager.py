@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 from typing import Optional, List, Dict, Any
+import subprocess
+import sys
 
 from precursor.scratchpad import render as scratchpad_render
 from precursor.components.task_proposer.task_proposer_pipeline import (
@@ -29,6 +31,7 @@ class AgentManager:
         self,
         *,
         task_pipeline: Optional[TaskProposerPipeline] = None,
+        deploy_enabled: bool = False,
     ) -> None:
         # dspy.Module – creates goals, milestones, tasks, and assessments
         self.task_pipeline = task_pipeline or TaskProposerPipeline()
@@ -44,6 +47,8 @@ class AgentManager:
             settings.get("deployment_threshold", 0.9)
         )
         self.max_deployed_tasks: int = int(settings.get("max_deployed_tasks", 3))
+        # runtime toggle: actually dispatch MCP agents for selected candidates
+        self.deploy_enabled: bool = deploy_enabled
 
     def _refresh_settings(self) -> None:
         """
@@ -185,9 +190,9 @@ class AgentManager:
             )
 
         # 5) future: actually dispatch here
-        # -------------------------------------------------
-        # for c in candidates: ...
-        # -------------------------------------------------
+        # Optionally spawn separate MCP agent processes for each candidate.
+        if self.deploy_enabled and candidates:
+            self._deploy_candidates(project_name, candidates)
 
         # return structured so tests / callers can inspect
         return {
@@ -198,3 +203,31 @@ class AgentManager:
             "task_assessments": assessments,
             "candidates": candidates,
         }
+
+    # ---------------------------------------------------------------------
+    # Deployment helpers
+    # ---------------------------------------------------------------------
+    def _deploy_candidates(self, project_name: str, candidates: List[Dict[str, Any]]) -> None:
+        """
+        Spawn a background MCP Agent process for each candidate task.
+        Uses the CLI entrypoint `python -m precursor.cli.mcp_agent_cli`.
+        """
+        for c in candidates:
+            task_desc = (c.get("task_description") or "").strip()
+            if not task_desc:
+                continue
+            try:
+                cmd = [
+                    sys.executable,
+                    "-m",
+                    "precursor.cli.mcp_agent_cli",
+                    "--project",
+                    project_name,
+                    "--task",
+                    task_desc,
+                ]
+                logger.info("agent_manager: deploying MCPAgent for project=%r task=%r", project_name, task_desc)
+                # Run detached/background; do not wait
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                logger.exception("agent_manager: failed to spawn MCPAgent for task %r", task_desc)
