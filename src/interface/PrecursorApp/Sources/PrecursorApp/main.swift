@@ -3,6 +3,23 @@ import AppKit
 import Foundation
 import SQLite3
 
+var initialProjectFromCLI: String?
+
+private func parseCLIArgs() {
+    let args = CommandLine.arguments
+    guard args.count > 1 else { return }
+    var i = 1
+    while i < args.count {
+        let arg = args[i]
+        if arg == "--project", i + 1 < args.count {
+            initialProjectFromCLI = args[i + 1]
+            i += 2
+        } else {
+            i += 1
+        }
+    }
+}
+
 // MARK: - Models
 
 enum TaskStatus: String {
@@ -379,6 +396,7 @@ final class AppState: ObservableObject {
 
 struct PrecursorAppView: View {
     @ObservedObject var state: AppState
+    let initialProject: String?
     @State private var expanded: Set<Int64> = []
     @State private var showSettings: Bool = false
 
@@ -399,7 +417,12 @@ struct PrecursorAppView: View {
             .padding(24)
         }
         .frame(minWidth: 1000, minHeight: 680)
-        .onAppear { state.loadInitial() }
+        .onAppear {
+            if let proj = initialProject {
+                state.selectedProject = proj
+            }
+            state.loadInitial()
+        }
         .sheet(isPresented: $showSettings) {
             SettingsSheetView(isPresented: $showSettings)
                 .frame(minWidth: 760, minHeight: 540)
@@ -703,9 +726,13 @@ struct PrecursorAppMain: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var state = AppState()
 
+    init() {
+        parseCLIArgs()
+    }
+
     var body: some Scene {
         WindowGroup {
-            PrecursorAppView(state: state)
+            PrecursorAppView(state: state, initialProject: initialProjectFromCLI)
         }
         .windowStyle(.hiddenTitleBar)
     }
@@ -715,6 +742,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            // If no visible windows, bring back the main SwiftUI window(s)
+            for window in sender.windows {
+                window.makeKeyAndOrderFront(self)
+            }
+        }
+        return true
     }
 }
 

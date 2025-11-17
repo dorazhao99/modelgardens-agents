@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
 import logging
 from typing import Dict, Any, Optional
+
+import precursor
 
 logger = logging.getLogger(__name__)
 
@@ -9,8 +13,81 @@ logger = logging.getLogger(__name__)
 class UIManager:
     """
     Simple UI-oriented manager that can be triggered by observers.
-    Real UI behavior should be implemented elsewhere; this just returns structured data.
+    This version intentionally uses a 'janky dev mode' approach:
+      - Always kills existing PrecursorApp processes
+      - Always launches a fresh `swift run PrecursorApp` instance
+
+    TODO (Long-Term, Real Solution):
+        • Build PrecursorApp as a proper macOS `.app` bundle
+        • Register a custom URL scheme (e.g., precursor://open?project=X)
+        • Add `onOpenURL` or event handler in Swift to route to the correct project
+        • Use:
+              open "precursor://open?project=X"
+          OR:
+              open -a PrecursorApp --args --project X
+          to reliably reuse/open/focus the same app instance.
+
+        Once bundled:
+        • Remove `pkill`
+        • Replace this entire launcher with `open -a PrecursorApp ...`
+        • Use Apple Event bridging to focus + reopen windows
     """
+
+    def _resolve_precursor_swift_root(self) -> Path:
+        """
+        Resolve the Swift PrecursorApp package root based on the installed Python package layout.
+        """
+        pkg_dir = Path(precursor.__file__).resolve().parent
+        src_dir = pkg_dir.parent
+        swift_root = src_dir / "interface" / "PrecursorApp"
+        if not (swift_root / "Package.swift").exists():
+            raise RuntimeError(f"PrecursorApp Swift package not found at {swift_root}")
+        return swift_root
+
+    def _notify_precursor_for_project(self, project_name: str) -> None:
+        """
+        Show a macOS notification which, when clicked, will:
+
+          1) Kill any existing PrecursorApp processes (dev-only behavior)
+          2) Launch a new `swift run PrecursorApp --project "<name>"`
+
+        This avoids the complexity of reopening/focusing an existing GUI
+        process created via `swift run`, which macOS does not treat as a
+        real application bundle.
+
+        TODO (Real App Flow):
+            When a real `.app` exists:
+              - Do NOT kill the running app
+              - Instead call:
+                    open -a PrecursorApp --args --project "<name>"
+              - OR trigger:
+                    open precursor://open?project=<name>
+              - Then handle routing in Swift via onOpenURL.
+        """
+
+        swift_root = self._resolve_precursor_swift_root()
+
+        execute_cmd = (
+            f'/usr/bin/env zsh -lc "'
+            f'pkill -x PrecursorApp || true; '  # ignore error if not running
+            f'cd \\"{swift_root}\\" && '
+            f'swift run PrecursorApp --project \\"{project_name}\\" '
+            f'>> /tmp/precursor_app.log 2>&1 &"'
+        )
+
+        logger.info("ui_manager: sending macOS notification for project %s", project_name)
+        subprocess.run(
+            [
+                "terminal-notifier",
+                "-title",
+                f"{project_name}",
+                "-message",
+                f"Click to check out what I worked on for \"{project_name}\" while you were gone.",
+                "-execute",
+                execute_cmd,
+            ],
+            check=True,
+        )
 
     def run_for_project(
         self,
@@ -20,8 +97,19 @@ class UIManager:
         project_description: Optional[str] = None,
         user_agent_goals: Optional[str] = None,
     ) -> Dict[str, Any]:
-        # For UIManager, interpret as a project-return notification by default
+        """
+        For UIManager, interpret as a project-return notification and also
+        trigger a macOS notification that can launch the Swift UI.
+
+        (This preserves the Manager protocol and existing return shape.)
+        """
         logger.info("ui_manager: run_for_project (notify project return) → %s", project_name)
+
+        try:
+            self._notify_precursor_for_project(project_name)
+        except Exception:
+            logger.exception("ui_manager: failed to send macOS notification")
+
         return {
             "project": project_name,
             "notification": {
@@ -29,4 +117,3 @@ class UIManager:
                 "message": f"Welcome back to {project_name}.",
             },
         }
-
