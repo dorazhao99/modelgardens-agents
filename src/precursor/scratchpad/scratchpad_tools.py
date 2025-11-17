@@ -17,6 +17,7 @@ import re
 from typing import Optional, Literal, List
 
 from precursor.scratchpad import store, render
+from precursor.projects.utils import get_project_names
 
 
 # ---------------------------------------------------------------------------
@@ -176,8 +177,12 @@ def append_to_scratchpad(
     # make sure the project exists in config
     if not store.is_valid_project(project_name):
         current = render.render_project_scratchpad(project_name)
+        # Suggest known projects to help correct the name
+        all_projects = get_project_names(only_enabled=False)
+        suggestions = "\n".join(f"- {p}" for p in all_projects) if all_projects else "None configured."
         return (
             f"Unknown project '{project_name}'. Please add it to config/projects.yaml or fix the name.\n\n"
+            f"Did you mean one of these instead?\n{suggestions}\n\n"
             f"== UPDATED SCRATCHPAD ==\n{current}"
         )
 

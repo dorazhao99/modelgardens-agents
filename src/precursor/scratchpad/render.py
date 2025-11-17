@@ -154,6 +154,18 @@ def render_project_scratchpad(project_name: str) -> str:
             out.append("")
             continue
 
+        # BEGIN TEMP_DISABLE_SELECTED_SECTIONS
+        # Temporarily disable rendering of several sections:
+        # - Next Steps
+        # - Ongoing Objectives
+        # - Completed Objectives
+        # - Suggestions
+        # - Notes
+        # To re-enable, remove or comment out this conditional block.
+        if section in {"Next Steps", "Ongoing Objectives", "Completed Objectives", "Suggestions", "Notes"}:
+            continue
+        # END TEMP_DISABLE_SELECTED_SECTIONS
+
         out.append(f"## {section}")
         sec_rows = grouped.get(section, [])
         if not sec_rows:

@@ -22,130 +22,176 @@ from typing import Optional, List, Tuple, Callable
 import logging
 
 from precursor.context.project_history import ProjectHistory, ProjectReading
-from precursor.managers.agent_manager import AgentManager
+from precursor.managers.base import Manager
 
 logger = logging.getLogger(__name__)
 
 
-class ProjectTransitionObserver:
+class ProjectActivityObserver:
+    """
+    Unified, configurable observer for project activity transitions.
+    Modes:
+      - 'departure': trigger for the project we just left after minimum duration
+      - 'arrival': trigger when returning to current project after an absence
+    """
+
     def __init__(
         self,
         *,
         history: ProjectHistory,
-        agent_manager: AgentManager,
-        min_entries_per_segment: int = 3,
-        min_segment_duration: timedelta = timedelta(minutes=10),
-        on_candidates: Optional[Callable[[str, dict], None]] = None,
+        agent_manager: Manager,
+        mode: str,
+        window_size: int = 20,
+        min_entries_current_segment: int = 1,
+        min_entries_previous_segment: int = 3,
+        time_threshold: timedelta = timedelta(minutes=10),
+        on_trigger: Optional[Callable[[str, dict], None]] = None,
     ) -> None:
+        if mode not in ("departure", "arrival"):
+            raise ValueError("mode must be 'departure' or 'arrival'")
         self.history = history
         self.agent_manager = agent_manager
-        self.min_entries_per_segment = min_entries_per_segment
-        self.min_segment_duration = min_segment_duration
-        self.on_candidates = on_candidates
-
-        # prevent re-firing on the same boundary
+        self.mode = mode
+        self.window_size = window_size
+        self.min_entries_current_segment = min_entries_current_segment
+        self.min_entries_previous_segment = min_entries_previous_segment
+        self.time_threshold = time_threshold
+        self.on_trigger = on_trigger
         self._last_triggered_key: Optional[str] = None
 
     def handle_processed(self) -> None:
-        # history.recent() returns oldest → newest
-        entries: List[ProjectReading] = self.history.recent(20)
-        if len(entries) < 2:
+        entries: List[ProjectReading] = self.history.recent(self.window_size)
+        if len(entries) < 1:
             return
 
-        current_seg, previous_seg = self._last_two_segments(entries)
-        if previous_seg is None:
+        cur_seg, prev_seg = self._last_two_segments(entries)
+
+        if self.mode == "departure":
+            if prev_seg is None:
+                return
+            (
+                cur_project,
+                cur_start,
+                _cur_end,
+                _cur_count,
+            ) = cur_seg
+            (
+                prev_project,
+                prev_start,
+                _prev_end,
+                prev_count,
+            ) = prev_seg
+
+            if prev_count < self.min_entries_previous_segment:
+                return
+
+            gap = cur_start - prev_start
+            if gap < self.time_threshold:
+                return
+
+            seg_key = f"{prev_project}:{prev_start.isoformat()}:{cur_start.isoformat()}"
+            if self._last_triggered_key == seg_key:
+                return
+
+            logger.info(
+                "project transition detected: left %s (entries=%d, duration=%s) → triggering manager",
+                prev_project,
+                prev_count,
+                gap,
+            )
+            result = self.agent_manager.run_for_project(prev_project)
+            if self.on_trigger is not None:
+                self.on_trigger(prev_project, result)
+            self._last_triggered_key = seg_key
             return
 
+        # arrival mode
         (
-            current_project,
-            current_start,
-            current_end,
-            current_count,
-        ) = current_seg
-        (
-            prev_project,
-            prev_start,
-            prev_end,
-            prev_count,
-        ) = previous_seg
-
-        # 1) enough samples in the previous segment?
-        if prev_count < self.min_entries_per_segment:
+            cur_project,
+            cur_start,
+            _cur_end,
+            cur_count,
+        ) = cur_seg
+        if cur_count < self.min_entries_current_segment:
+            return
+        # find last time we were in this project before current segment
+        last_seen_end = self._last_seen_end_for_project(entries, cur_project, cur_start)
+        if last_seen_end is None:
+            return
+        absence = cur_start - last_seen_end
+        if absence < self.time_threshold:
             return
 
-        # 2) measure duration as "we were on prev_project from its first
-        #    timestamp until we started the current segment"
-        duration = current_start - prev_start
-        if duration < self.min_segment_duration:
-            return
-
-        # 3) dedupe
-        seg_key = f"{prev_project}:{prev_start.isoformat()}:{current_start.isoformat()}"
+        seg_key = f"{cur_project}:{cur_start.isoformat()}:{last_seen_end.isoformat()}"
         if self._last_triggered_key == seg_key:
             return
 
         logger.info(
-            "project transition detected: left %s (entries=%d, duration=%s) → triggering agent",
-            prev_project,
-            prev_count,
-            duration,
+            "project return detected: returned to %s after %s (entries_in_current=%d) → triggering manager",
+            cur_project,
+            absence,
+            cur_count,
         )
-
-        # real agent manager hook
-        result = self.agent_manager.run_for_project(prev_project)
-        if self.on_candidates is not None:
-            self.on_candidates(prev_project, result)
-
+        result = self.agent_manager.run_for_project(cur_project)
+        if self.on_trigger is not None:
+            self.on_trigger(cur_project, result)
         self._last_triggered_key = seg_key
 
-    # ------------------------------------------------------------------
-    # helpers
-    # ------------------------------------------------------------------
+    # helpers reused from prior implementations
     def _last_two_segments(
         self, entries: List[ProjectReading]
     ) -> Tuple[
         Tuple[str, object, object, int],
         Optional[Tuple[str, object, object, int]],
     ]:
-        """
-        entries: oldest → newest
-
-        We walk backward (from newest) to build:
-          - current segment (last contiguous block of same project)
-          - previous segment (the block right before that)
-        """
         n = len(entries)
         idx = n - 1
 
-        # --- current segment (newest block) ---
+        # current segment
         cur_project = entries[idx].project
         cur_end = entries[idx].timestamp
         cur_start = entries[idx].timestamp
         cur_count = 1
         idx -= 1
-
         while idx >= 0 and entries[idx].project == cur_project:
             cur_start = entries[idx].timestamp
             cur_count += 1
             idx -= 1
-
         current_segment = (cur_project, cur_start, cur_end, cur_count)
-
-        # no previous segment
         if idx < 0:
             return current_segment, None
 
-        # --- previous segment ---
         prev_project = entries[idx].project
         prev_end = entries[idx].timestamp
         prev_start = entries[idx].timestamp
         prev_count = 1
         idx -= 1
-
         while idx >= 0 and entries[idx].project == prev_project:
             prev_start = entries[idx].timestamp
             prev_count += 1
             idx -= 1
-
         previous_segment = (prev_project, prev_start, prev_end, prev_count)
         return current_segment, previous_segment
+
+    def _last_seen_end_for_project(
+        self,
+        entries: List[ProjectReading],
+        project: str,
+        current_segment_start: object,
+    ) -> Optional[object]:
+        """
+        Scan entries before the current segment to find the most recent segment end
+        for `project` (end timestamp of that older segment).
+        """
+        # find the index immediately before current segment by walking back from end
+        n = len(entries)
+        idx = n - 1
+        while idx >= 0 and entries[idx].timestamp != current_segment_start:
+            idx -= 1
+        # at this point, idx points to first element of current segment
+        idx -= 1
+        while idx >= 0:
+            if entries[idx].project == project:
+                return entries[idx].timestamp
+            idx -= 1
+        return None

@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Optional
 
 from precursor.scratchpad import store
+from precursor.projects.utils import get_project_names
 
 def store_artifact(
     project_name: str,
@@ -50,6 +51,15 @@ def store_artifact(
         A short confirmation string suitable for logging or display.
     """
     store.init_db()
+
+    # Validate project early and provide helpful suggestions
+    if not store.is_valid_project(project_name):
+        all_projects = get_project_names(only_enabled=False)
+        suggestions = "\n".join(f"- {p}" for p in all_projects) if all_projects else "None configured."
+        return (
+            f"Unknown project '{project_name}'. Please fix the name or add it to config/projects.yaml.\n\n"
+            f"Did you mean one of these instead?\n{suggestions}\n\n"
+        )
 
     visible_message = f"{task} [{short_description}] (uri: {uri})".strip()
     metadata = {

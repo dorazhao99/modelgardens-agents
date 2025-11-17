@@ -22,6 +22,8 @@ from precursor.scratchpad.scratchpad_tools import (
     edit_in_scratchpad,
     get_refreshed_scratchpad,
 )
+from precursor.core_tools.context_agent_tool import gather_project_context
+from precursor.core_tools.fast_find_tool import search_folders_fast
 
 def _namespace_tool(server_id: str, fn: Any) -> Tuple[str, Any]:
     name = getattr(fn, "__name__", "tool").strip() or "tool"
@@ -60,7 +62,7 @@ def _with_logging(ns_name: str, fn: Any) -> Any:
                 return result
 
     # Preserve metadata critical to DSPy/tool callers
-    _wrapped.__name__ = getattr(fn, "__name__", "tool")
+    _wrapped.__name__ = ns_name
     _wrapped.__qualname__ = getattr(fn, "__qualname__", _wrapped.__name__)
     _wrapped.__doc__ = getattr(fn, "__doc__", None)
     _wrapped.__signature__ = sig  # type: ignore[attr-defined]
@@ -100,6 +102,8 @@ def build_toolset(servers_bundle) -> List[dspy.Tool]:
         remove_from_scratchpad,    # remove by display index
         edit_in_scratchpad,        # edit by display index
         get_refreshed_scratchpad,  # render current scratchpad
+        gather_project_context,    # run context-building sub-agent (uses gpt-5-nano)
+        search_folders_fast,       # fast folder search (prefer over filesystem.search_files for dirs)
     ]
     for core_fn in core_tool_fns:
         ns = f"core.{getattr(core_fn, '__name__', 'tool')}"

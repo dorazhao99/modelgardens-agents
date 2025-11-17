@@ -15,7 +15,7 @@ from precursor.config.loader import get_user_agent_goals
 from precursor.context.project_history import ProjectHistory
 from precursor.managers.state_manager import StateManager
 from precursor.managers.agent_manager import AgentManager
-from precursor.observers.project_transition import ProjectTransitionObserver
+from precursor.observers.project_transition import ProjectActivityObserver
 from precursor.observers.gum_source import GumSource
 from precursor.observers.csv_simulator import CSVSimulatorObserver, CSVSimulatorConfig
 
@@ -121,14 +121,14 @@ def _resolve_scratchpad_db_path(mode: str) -> Path:
         return Path(env_path).expanduser().resolve()
 
     if mode == "csv":
-        return Path("dev/survey/scratchpad_sim.db").resolve()
+        return Path("dev/survey/scratchpad_sim2.db").resolve()
 
     return Path("scratchpad.db").resolve()
 
 
 async def _run_gum_mode(
     state_mgr: StateManager,
-    transition_obs: ProjectTransitionObserver,
+    transition_obs: ProjectActivityObserver,
     max_steps: Optional[int],
     csv_logger: Optional[_CsvLogger],
 ) -> None:
@@ -154,7 +154,7 @@ async def _run_gum_mode(
 
 async def _run_csv_mode(
     state_mgr: StateManager,
-    transition_obs: ProjectTransitionObserver,
+    transition_obs: ProjectActivityObserver,
     csv_path: str,
     interval_seconds: float,
     fast: bool,
@@ -282,12 +282,14 @@ async def main() -> None:
     if args.agent_output_csv:
         agent_csv_logger = _AgentCsvLogger(Path(args.agent_output_csv))
 
-    transition_obs = ProjectTransitionObserver(
+    transition_obs = ProjectActivityObserver(
         history=history,
         agent_manager=agent_mgr,
-        min_entries_per_segment=3,
-        min_segment_duration=timedelta(minutes=3),
-        on_candidates=(
+        mode="departure",
+        window_size=20,
+        min_entries_previous_segment=3,
+        time_threshold=timedelta(minutes=3),
+        on_trigger=(
             (lambda project, result: agent_csv_logger.log_candidates(project=project, result=result))
             if agent_csv_logger is not None
             else None
@@ -319,4 +321,4 @@ if __name__ == "__main__":
 #   python -m precursor.main --mode gum --output-csv dev/survey/pipeline_run.csv --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv --log-level INFO
 #
 # CSV replay with fast mode and both logs:
-#   python -m precursor.main --mode csv --csv-path dev/survey/context_log.csv --fast --output-csv dev/survey/pipeline_run.csv --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv --log-level INFO --force-reset
+#   python -m precursor.main --mode csv --csv-path dev/survey/context_log.csv --fast --output-csv dev/survey/pipeline_run_no_next_steps.csv --agent-output-csv dev/survey/pipeline_run_no_next_steps.agent_candidates.csv --log-level INFO --force-reset --max-steps 25

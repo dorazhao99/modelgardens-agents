@@ -16,7 +16,6 @@
 # You can safely add more projects here; the scratchpad/store layer will
 # validate against this list.
 # ---------------------------------------------------------------------------
-
 projects:
   - name: "AutoMetrics Release"
     description: "Working on a website demo, polishing the overleaf, responding to ICLR reviews, and running some final experiments for the AutoMetrics paper."

@@ -65,3 +65,44 @@ def load_enabled_mcp_servers(config_path: str | None = None) -> MCPConfigBundle:
 
     allow_fn = compile_allow_fn(defaults)
     return MCPConfigBundle(servers=servers, allow_fn=allow_fn)
+
+
+def load_selected_mcp_servers(server_ids: List[str], config_path: str | None = None) -> MCPConfigBundle:
+    """
+    Load only the specified MCP servers (if enabled) + global allow/deny settings.
+    This avoids starting all servers when only a subset is needed.
+
+    Args:
+        server_ids: List of server ids to load (e.g., ["filesystem", "drive"])
+        config_path: Optional explicit path to mcp_servers.yaml. If None,
+                     uses PRECURSOR_MCP_SERVERS_FILE or the package default.
+
+    Returns:
+        MCPConfigBundle(servers=[LoadedServer], allow_fn=callable)
+    """
+    cfg = (
+        load_mcp_servers_yaml()
+        if config_path is None
+        else load_yaml_override(config_path)
+    )
+
+    defaults: Dict[str, Any] = cfg.get("defaults") or {}
+    servers_cfg: List[Dict[str, Any]] = cfg.get("servers") or []
+    wanted = set(server_ids)
+
+    servers: List[LoadedServer] = []
+    for spec in servers_cfg:
+        if str(spec.get("id")) not in wanted:
+            continue
+        enabled = spec.get("enabled", defaults.get("enabled", True))
+        if not enabled:
+            continue
+        if "id" not in spec or "load" not in spec:
+            continue
+
+        apply_env(spec)
+        client = start_server(spec)
+        servers.append(LoadedServer(id=str(spec["id"]), client=client))
+
+    allow_fn = compile_allow_fn(defaults)
+    return MCPConfigBundle(servers=servers, allow_fn=allow_fn)
