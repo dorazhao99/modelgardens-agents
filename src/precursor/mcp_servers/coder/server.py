@@ -16,6 +16,9 @@ from __future__ import annotations
 import os
 from typing import Any, Dict
 import json
+import platform
+import subprocess
+import time
 
 from mcp.server.fastmcp import FastMCP
 from dotenv import load_dotenv
@@ -37,6 +40,87 @@ import dspy
 
 
 mcp = FastMCP("coder")
+
+
+# ---------------------------------------------------------------------------
+# Docker readiness helpers
+# ---------------------------------------------------------------------------
+def _docker_info_ok() -> bool:
+    try:
+        proc = subprocess.run(
+            ["docker", "info"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=5,
+        )
+        return proc.returncode == 0
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return False
+
+
+def _start_docker_background() -> None:
+    system = platform.system()
+    try:
+        if system == "Darwin":
+            # Launch Docker Desktop without stealing focus
+            subprocess.Popen(
+                ["/usr/bin/open", "-g", "-a", "Docker"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        elif system == "Linux":
+            # Best-effort attempts without sudo (environment may not allow)
+            for cmd in (
+                ["systemctl", "--user", "start", "docker"],
+                ["systemctl", "start", "docker"],
+                ["service", "docker", "start"],
+            ):
+                try:
+                    subprocess.run(
+                        cmd,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                        timeout=5,
+                    )
+                except subprocess.SubprocessError:
+                    pass
+        elif system == "Windows":
+            # Start Docker Desktop; ignore errors if not installed
+            subprocess.Popen(
+                'cmd /c start "" "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"',
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+    except Exception:
+        # Swallow errors; readiness will be checked via _docker_info_ok
+        pass
+
+
+def ensure_docker_running(timeout_seconds: int = 180) -> bool:
+    """
+    Ensure Docker engine is running. Attempt to start it in the background
+    if it is not yet running, then wait until ready or timeout.
+    """
+    if _docker_info_ok():
+        return True
+
+    _start_docker_background()
+
+    deadline = time.time() + max(1, timeout_seconds)
+    # Initial short delay to give the daemon a moment to spawn
+    time.sleep(2)
+    backoff = 1.0
+
+    while time.time() < deadline:
+        if _docker_info_ok():
+            return True
+        time.sleep(min(5.0, backoff))
+        backoff = min(5.0, backoff * 1.5)
+
+    return _docker_info_ok()
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +364,17 @@ async def run_code_task(
         the one-sentence short summary, and a reminder:
         **do not resubmit the artifact if it was already recorded successfully.**
     """
+    # Ensure Docker is running for OpenHands
+    if not ensure_docker_running(timeout_seconds=180):
+        return (
+            "[DOCKER_NOT_RUNNING] Project: "
+            f"{project_name}\nRepo: UNKNOWN (path: UNKNOWN)\nPR: N/A\n"
+            "Summary: Docker engine is not running and could not be started automatically. "
+            "Please start Docker Desktop (macOS/Windows) or the docker service (Linux), "
+            "then retry.\n"
+            "Artifact could not be recorded automatically; if you retry, take care not to duplicate entries."
+        )
+
     # Minimal, explicit model selection (as in your old demo)
     model = dspy.LM('openai/gpt-4o-mini-2024-07-18')
 
