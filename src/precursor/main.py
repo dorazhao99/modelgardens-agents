@@ -15,6 +15,7 @@ import io
 
 import dspy
 from PIL import Image as PILImage
+from platformdirs import user_data_dir
 from precursor.config.loader import get_user_agent_goals
 import precursor.config.loader as config_loader
 from precursor.context.project_history import ProjectHistory
@@ -132,7 +133,12 @@ def _resolve_scratchpad_db_path(mode: str) -> Path:
     if mode == "csv":
         return Path("dev/survey/scratchpad_sim2.db").resolve()
 
-    return Path("scratchpad.db").resolve()
+    # Default to platform-specific user data dir:
+    # macOS:   ~/Library/Application Support/precursor/scratchpad.db
+    # Linux:   ~/.local/share/precursor/scratchpad.db
+    # Windows: C:\\Users\\<user>\\AppData\\Local\\precursor\\scratchpad.db
+    data_dir = Path(user_data_dir(appname="precursor"))
+    return (data_dir / "scratchpad.db").resolve()
 
 
 async def _run_gum_mode(
