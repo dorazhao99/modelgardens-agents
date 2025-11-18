@@ -162,7 +162,7 @@ def render_project_scratchpad(project_name: str) -> str:
         # - Suggestions
         # - Notes
         # To re-enable, remove or comment out this conditional block.
-        if section in {"Next Steps", "Ongoing Objectives", "Completed Objectives", "Suggestions", "Notes"}:
+        if section in {"Next Steps"}:
             continue
         # END TEMP_DISABLE_SELECTED_SECTIONS
 

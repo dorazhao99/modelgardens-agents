@@ -9,8 +9,12 @@ import os
 from datetime import timedelta
 from pathlib import Path
 from typing import Optional, Any, Dict
+import re
+import base64
+import io
 
 import dspy
+from PIL import Image as PILImage
 from precursor.config.loader import get_user_agent_goals
 import precursor.config.loader as config_loader
 from precursor.context.project_history import ProjectHistory
@@ -20,6 +24,7 @@ from precursor.managers.ui_manager import UIManager
 from precursor.observers.project_transition import ProjectActivityObserver
 from precursor.observers.gum_source import GumSource
 from precursor.observers.csv_simulator import CSVSimulatorObserver, CSVSimulatorConfig
+#
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +51,7 @@ class _CsvLogger:
             "user_agent_goals",
             "calendar_events",
             "recent_propositions",
+            "screenshot_path",
             "scratchpad_text",
         ]
         with self.path.open("a", newline="", encoding="utf-8") as f:
@@ -66,6 +72,7 @@ class _CsvLogger:
                     or "",
                     "calendar_events": event.calendar_events or "",
                     "recent_propositions": event.recent_propositions or "",
+                    "screenshot_path": result.get("screenshot_path", ""),
                     "scratchpad_text": result.get("scratchpad_text", ""),
                 }
             )
@@ -135,6 +142,7 @@ async def _run_gum_mode(
     max_steps: Optional[int],
     csv_logger: Optional[_CsvLogger],
     cooldown_seconds: float,
+    screenshot_dir: Optional[Path],
 ) -> None:
     processed = 0
 
@@ -143,6 +151,30 @@ async def _run_gum_mode(
         result = state_mgr.process_event(event)
         transition_obs.handle_processed()
         return_obs.handle_processed()
+
+        # If configured, capture and save a screenshot for logging (GUM mode)
+        if screenshot_dir is not None and getattr(event, "screenshot", None) is not None:
+            screenshot_dir.mkdir(parents=True, exist_ok=True)
+            project_slug = result.get("project", "") or "unknown"
+            project_slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", project_slug).strip("_")
+            ts = event.timestamp.strftime("%Y%m%d_%H%M%S")
+            # Extract exact bytes from data URL stored in dspy.Image.url
+            img_obj = event.screenshot
+            url_val = getattr(img_obj, "url", None)
+            if isinstance(url_val, str) and url_val.startswith("data:"):
+                # data:[<mediatype>][;base64],<data>
+                try:
+                    header, b64data = url_val.split(",", 1)
+                    # Always save as a real PNG file
+                    out_path = screenshot_dir / f"{ts}_{project_slug}.png"
+                    raw = base64.b64decode(b64data)
+                    pil = PILImage.open(io.BytesIO(raw))
+                    pil.save(out_path, format="PNG")
+                    result["screenshot_path"] = str(out_path.resolve())
+                except Exception as e:
+                    logger.warning("failed to decode and save data URL screenshot: %s", e)
+            else:
+                logger.warning("event.screenshot present but no data URL available; skipping save")
 
         if csv_logger is not None:
             csv_logger.log(event, result)
@@ -245,6 +277,11 @@ async def main() -> None:
         help="If set, log candidate tasks selected by AgentManager to this CSV.",
     )
     parser.add_argument(
+        "--screenshot-dir",
+        default=None,
+        help="If set, save screenshots (GUM mode) here and log their paths.",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
     )
@@ -294,6 +331,7 @@ async def main() -> None:
         csv_logger = _CsvLogger(Path(args.output_csv))
     if args.agent_output_csv:
         agent_csv_logger = _AgentCsvLogger(Path(args.agent_output_csv))
+    screenshot_dir: Optional[Path] = Path(args.screenshot_dir).expanduser().resolve() if args.screenshot_dir else None
 
     # Load transition sensitivity settings (with safe defaults)
     _settings = config_loader.get_settings() or {}
@@ -339,7 +377,7 @@ async def main() -> None:
     # run
     if args.mode == "gum":
         logger.info("starting in GUM mode")
-        await _run_gum_mode(state_mgr, transition_obs, return_obs, args.max_steps, csv_logger, gum_cooldown)
+        await _run_gum_mode(state_mgr, transition_obs, return_obs, args.max_steps, csv_logger, gum_cooldown, screenshot_dir)
     else:
         logger.info("starting in CSV mode (%s)", args.csv_path)
         await _run_csv_mode(
@@ -359,7 +397,7 @@ if __name__ == "__main__":
 
 # Example usage:
 # Full (GUM) run with both logs:
-#   python -m precursor.main --mode gum --output-csv dev/survey/pipeline_run.csv --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv --log-level INFO
+#   python -m precursor.main --mode gum --output-csv dev/survey/pipeline_run.csv --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv --screenshot-dir dev/survey/screenshots --log-level INFO
 #
 # CSV replay with fast mode and both logs:
 #   python -m precursor.main --mode csv --csv-path dev/survey/context_log.csv --fast --output-csv dev/survey/pipeline_run_no_next_steps.csv --agent-output-csv dev/survey/pipeline_run_no_next_steps.agent_candidates.csv --log-level INFO --force-reset --max-steps 25 --no-deploy

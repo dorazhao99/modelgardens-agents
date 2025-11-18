@@ -54,6 +54,36 @@ class GumSource:
         self.cooldown_seconds = float(cooldown_seconds or 0.0)
         self._last_sent_at: Optional[datetime] = None
 
+    def _serialize_recent_propositions(self, items: Any) -> str:
+        """
+        Convert gum.recent() output (often a list of Proposition objects)
+        into a newline-delimited string suitable for LLM inputs.
+        """
+        if not items:
+            return ""
+        # If it's already a string, pass through
+        if isinstance(items, str):
+            return items
+        # If it's a list/iterable, try to extract `text` and optional reasoning
+        try:
+            lines = []
+            for idx, item in enumerate(items, start=1):
+                # Prefer explicit fields commonly present on gum Proposition
+                text = getattr(item, "text", None)
+                reasoning = getattr(item, "reasoning", None)
+                if isinstance(text, str) and text.strip():
+                    line = f"[{idx}] {text.strip()}"
+                    if isinstance(reasoning, str) and reasoning.strip():
+                        line = f"{line} — {reasoning.strip()}"
+                    lines.append(line)
+                else:
+                    # Fallback to string representation
+                    lines.append(f"[{idx}] {str(item)}")
+            return "\n".join(lines)
+        except Exception:
+            # Final fallback
+            return str(items)
+
     async def run(
         self,
         handler: Optional[Callable[[ContextEvent], Any] | Callable[[ContextEvent], Awaitable[Any]]] = None,
@@ -84,7 +114,8 @@ class GumSource:
                         return
                 # === Context ===
                 context_update = update.content
-                recent_propositions = await gum_instance.recent()
+                recent_list = await gum_instance.recent()
+                recent_propositions = self._serialize_recent_propositions(recent_list)
                 calendar_events = cal.query_str(
                     start_delta=timedelta(days=0),
                     end_delta=timedelta(days=self.poll_calendar_days),

@@ -146,13 +146,21 @@ python -m precursor.main --mode gum --log-level INFO
 
 Optional logging:
 - Write processed events + final scratchpad to CSV:
-  ```bash
-  python -m precursor.main --mode gum --output-csv dev/survey/pipeline_run.csv
-  ```
+```bash
+python -m precursor.main --mode gum --output-csv dev/survey/pipeline_run.csv
+```
 - Also log candidate tasks scored by the agent:
-  ```bash
-  python -m precursor.main --mode gum --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv
-  ```
+```bash
+python -m precursor.main --mode gum --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv
+```
+- Save per-event screenshots (GUM mode) and include their paths in the CSV (`screenshot_path`):
+```bash
+python -m precursor.main --mode gum --screenshot-dir dev/survey/screenshots --output-csv dev/survey/pipeline_run.csv
+```
+- All logs + screenshots:
+```bash
+python -m precursor.main --mode gum --output-csv dev/survey/pipeline_run.csv --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv --screenshot-dir dev/survey/screenshots
+```
 
 Other useful flags:
 - `--no-deploy` — score/log tasks without executing next steps
