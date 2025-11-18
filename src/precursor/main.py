@@ -12,6 +12,7 @@ from typing import Optional, Any, Dict
 
 import dspy
 from precursor.config.loader import get_user_agent_goals
+import precursor.config.loader as config_loader
 from precursor.context.project_history import ProjectHistory
 from precursor.managers.state_manager import StateManager
 from precursor.managers.agent_manager import AgentManager
@@ -133,6 +134,7 @@ async def _run_gum_mode(
     return_obs: ProjectActivityObserver,
     max_steps: Optional[int],
     csv_logger: Optional[_CsvLogger],
+    cooldown_seconds: float,
 ) -> None:
     processed = 0
 
@@ -151,7 +153,7 @@ async def _run_gum_mode(
                 logger.info("reached max_steps=%d in gum mode, stopping", max_steps)
                 asyncio.get_running_loop().stop()
 
-    observer = GumSource(on_event=handle_event)
+    observer = GumSource(on_event=handle_event, cooldown_seconds=cooldown_seconds)
     await observer.run()
 
 
@@ -213,8 +215,8 @@ async def main() -> None:
     parser.add_argument(
         "--interval-seconds",
         type=float,
-        default=180.0,
-        help="Interval between simulated events in csv mode (ignored in --fast).",
+        default=60.0,
+        help="Interval between simulated events in csv mode or observations in gum mode(ignored in --fast).",
     )
     parser.add_argument(
         "--fast",
@@ -293,13 +295,30 @@ async def main() -> None:
     if args.agent_output_csv:
         agent_csv_logger = _AgentCsvLogger(Path(args.agent_output_csv))
 
+    # Load transition sensitivity settings (with safe defaults)
+    _settings = config_loader.get_settings() or {}
+    dep_min_prev = int(_settings.get("departure_min_entries_previous_segment", 3))
+    dep_time_min = float(_settings.get("departure_time_threshold_minutes", 3))
+    arr_min_cur = int(_settings.get("arrival_min_entries_current_segment", 1))
+    arr_time_min = float(_settings.get("arrival_time_threshold_minutes", 15))
+
+    # Determine Gum observation cooldown (seconds)
+    gum_cooldown = float(_settings.get("observation_cooldown_seconds", 60.0))
+    # If user provided a non-default interval and we're in gum mode, reuse it as cooldown
+    try:
+        _arg_interval = float(args.interval_seconds)
+    except Exception:
+        _arg_interval = None
+    if args.mode == "gum" and _arg_interval is not None and _arg_interval != 180.0:
+        gum_cooldown = _arg_interval
+
     transition_obs = ProjectActivityObserver(
         history=history,
         agent_manager=agent_mgr,
         mode="departure",
         window_size=20,
-        min_entries_previous_segment=3,
-        time_threshold=timedelta(minutes=3),
+        min_entries_previous_segment=dep_min_prev,
+        time_threshold=timedelta(minutes=dep_time_min),
         on_trigger=(
             (lambda project, result: agent_csv_logger.log_candidates(project=project, result=result))
             if agent_csv_logger is not None
@@ -312,15 +331,15 @@ async def main() -> None:
         agent_manager=ui_mgr,
         mode="arrival",
         window_size=20,
-        min_entries_current_segment=1,
-        time_threshold=timedelta(minutes=15),
+        min_entries_current_segment=arr_min_cur,
+        time_threshold=timedelta(minutes=arr_time_min),
         on_trigger=None,
     )
 
     # run
     if args.mode == "gum":
         logger.info("starting in GUM mode")
-        await _run_gum_mode(state_mgr, transition_obs, return_obs, args.max_steps, csv_logger)
+        await _run_gum_mode(state_mgr, transition_obs, return_obs, args.max_steps, csv_logger, gum_cooldown)
     else:
         logger.info("starting in CSV mode (%s)", args.csv_path)
         await _run_csv_mode(

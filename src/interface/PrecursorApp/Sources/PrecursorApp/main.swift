@@ -777,6 +777,13 @@ struct SystemSettingsConfig {
     var maxDeployedTasks: Int
     var deploymentThreshold: Double
     var safetyThreshold: Int
+    // Transition sensitivities
+    var departureTimeThresholdMinutes: Double
+    var departureMinEntriesPreviousSegment: Int
+    var arrivalTimeThresholdMinutes: Double
+    var arrivalMinEntriesCurrentSegment: Int
+    // Observation source cooldown (seconds)
+    var observationCooldownSeconds: Double
 }
 
 enum ConfigPathKind {
@@ -929,7 +936,12 @@ agent_goals: |
             userPreferenceAlignmentWeight: d("user_preference_alignment_weight", 0.5),
             maxDeployedTasks: i("max_deployed_tasks", 3),
             deploymentThreshold: d("deployment_threshold", 0.9),
-            safetyThreshold: i("safety_threshold", 7)
+            safetyThreshold: i("safety_threshold", 7),
+            departureTimeThresholdMinutes: d("departure_time_threshold_minutes", 3.0),
+            departureMinEntriesPreviousSegment: i("departure_min_entries_previous_segment", 3),
+            arrivalTimeThresholdMinutes: d("arrival_time_threshold_minutes", 15.0),
+            arrivalMinEntriesCurrentSegment: i("arrival_min_entries_current_segment", 1),
+            observationCooldownSeconds: d("observation_cooldown_seconds", 60.0)
         )
     }
 
@@ -958,6 +970,18 @@ max_deployed_tasks: \(s.maxDeployedTasks)
 deployment_threshold: \(formatDouble(s.deploymentThreshold))
 
 safety_threshold: \(s.safetyThreshold)
+
+# Notification / transition sensitivities
+# ---------------------------------------------------------------------------
+departure_time_threshold_minutes: \(formatDouble(s.departureTimeThresholdMinutes))
+departure_min_entries_previous_segment: \(s.departureMinEntriesPreviousSegment)
+
+arrival_time_threshold_minutes: \(formatDouble(s.arrivalTimeThresholdMinutes))
+arrival_min_entries_current_segment: \(s.arrivalMinEntriesCurrentSegment)
+
+# Observation source cooldown
+# ---------------------------------------------------------------------------
+observation_cooldown_seconds: \(formatDouble(s.observationCooldownSeconds))
 """
         try body.write(to: path, atomically: true, encoding: .utf8)
     }
@@ -1029,7 +1053,10 @@ final class SettingsViewModel: ObservableObject {
     @Published var user = UserConfig(name: "", description: "", agentGoals: "")
     @Published var settings = SystemSettingsConfig(
         valueWeight: 2.0, feasibilityWeight: 1.5, userPreferenceAlignmentWeight: 0.5,
-        maxDeployedTasks: 3, deploymentThreshold: 0.9, safetyThreshold: 7
+        maxDeployedTasks: 3, deploymentThreshold: 0.9, safetyThreshold: 7,
+        departureTimeThresholdMinutes: 3.0, departureMinEntriesPreviousSegment: 3,
+        arrivalTimeThresholdMinutes: 15.0, arrivalMinEntriesCurrentSegment: 1,
+        observationCooldownSeconds: 60.0
     )
     @Published var errorMessage: String? = nil
     @Published var savedBanner: String? = nil
@@ -1300,6 +1327,44 @@ struct SystemSettingsView: View {
                             set: { vm.settings.safetyThreshold = Int($0.rounded()) }
                         ), in: 1...10, step: 1)
                         Text("\(vm.settings.safetyThreshold)").frame(width: 60, alignment: .trailing)
+                    }
+                }
+                GroupBox("Notifications & Agent Sensitivity") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Departure (when leaving a project)").font(.system(size: 12, weight: .semibold))
+                        HStack {
+                            Text("Min Entries in Previous Segment").frame(width: 220, alignment: .leading)
+                            TextField("", value: $vm.settings.departureMinEntriesPreviousSegment, formatter: NumberFormatter.integer)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 80)
+                            Spacer()
+                        }
+                        HStack {
+                            Text("Time Threshold (minutes)").frame(width: 220, alignment: .leading)
+                            Slider(value: $vm.settings.departureTimeThresholdMinutes, in: 0...120, step: 1)
+                            Text(String(format: "%.0f", vm.settings.departureTimeThresholdMinutes)).frame(width: 60, alignment: .trailing)
+                        }
+                        Divider().padding(.vertical, 4)
+                        Text("Arrival (when returning to a project)").font(.system(size: 12, weight: .semibold))
+                        HStack {
+                            Text("Min Entries in Current Segment").frame(width: 220, alignment: .leading)
+                            TextField("", value: $vm.settings.arrivalMinEntriesCurrentSegment, formatter: NumberFormatter.integer)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 80)
+                            Spacer()
+                        }
+                        HStack {
+                            Text("Absence Threshold (minutes)").frame(width: 220, alignment: .leading)
+                            Slider(value: $vm.settings.arrivalTimeThresholdMinutes, in: 0...240, step: 1)
+                            Text(String(format: "%.0f", vm.settings.arrivalTimeThresholdMinutes)).frame(width: 60, alignment: .trailing)
+                        }
+                        Divider().padding(.vertical, 4)
+                        Text("Observation Cooldown (Gum)").font(.system(size: 12, weight: .semibold))
+                        HStack {
+                            Text("Cooldown (seconds)").frame(width: 220, alignment: .leading)
+                            Slider(value: $vm.settings.observationCooldownSeconds, in: 0...600, step: 5)
+                            Text(String(format: "%.0f", vm.settings.observationCooldownSeconds)).frame(width: 60, alignment: .trailing)
+                        }
                     }
                 }
             }

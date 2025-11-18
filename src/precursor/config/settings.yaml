@@ -15,3 +15,22 @@ max_deployed_tasks: 3
 deployment_threshold: 0.9
 
 safety_threshold: 7
+
+# Notification / transition sensitivities
+# ---------------------------------------------------------------------------
+# Configure how sensitive project transition detection should be.
+# - departure_* controls when we trigger actions for the project we just LEFT
+# - arrival_* controls when we notify on RETURN to a project
+# Times are in minutes.
+departure_time_threshold_minutes: 3
+departure_min_entries_previous_segment: 3
+
+arrival_time_threshold_minutes: 15
+arrival_min_entries_current_segment: 1
+
+# Observation source cooldown
+# ---------------------------------------------------------------------------
+# Minimum seconds between emitted observations.
+# - Applies to Gum source (real-time). If 0, no cooldown.
+# - CSV mode already uses interval_seconds, which serves a similar purpose.
+observation_cooldown_seconds: 60

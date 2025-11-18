@@ -40,6 +40,8 @@ class GumSource:
         poll_calendar_days: int = 3,
         max_batch_size: int = 15,
         capture_screenshot: bool = True,
+        on_event: Optional[Callable[[ContextEvent], Any] | Callable[[ContextEvent], Awaitable[Any]]] = None,
+        cooldown_seconds: float = 60.0,
     ) -> None:
         self.user_name = get_user_name()
         self.user_description = get_user_description()
@@ -48,14 +50,20 @@ class GumSource:
         self.poll_calendar_days = poll_calendar_days
         self.max_batch_size = max_batch_size
         self.capture_screenshot = capture_screenshot
+        self.on_event = on_event
+        self.cooldown_seconds = float(cooldown_seconds or 0.0)
+        self._last_sent_at: Optional[datetime] = None
 
     async def run(
         self,
-        handler: Callable[[ContextEvent], Any] | Callable[[ContextEvent], Awaitable[Any]],
+        handler: Optional[Callable[[ContextEvent], Any] | Callable[[ContextEvent], Awaitable[Any]]] = None,
     ) -> None:
         """
         Open gum, register an update handler, and run forever.
         """
+        effective_handler = handler or self.on_event
+        if effective_handler is None:
+            raise ValueError("GumSource.run requires a handler (or provide on_event in __init__).")
         cal = Calendar()
         screen = Screen(self.model)
         logger.info("Starting GumSource for user=%s, model=%s", self.user_name, self.model)
@@ -69,6 +77,11 @@ class GumSource:
         ) as gum_instance:
 
             async def _on_update(observer, update):
+                # Cooldown gating: drop updates that arrive too soon
+                now = datetime.now(timezone.utc)
+                if self.cooldown_seconds > 0 and self._last_sent_at is not None:
+                    if (now - self._last_sent_at) < timedelta(seconds=self.cooldown_seconds):
+                        return
                 # === Context ===
                 context_update = update.content
                 recent_propositions = await gum_instance.recent()
@@ -80,7 +93,7 @@ class GumSource:
 
                 # === Package event ===
                 event = ContextEvent(
-                    timestamp=datetime.now(timezone.utc),
+                    timestamp=now,
                     context_update=context_update,
                     screenshot=screenshot,
                     user_name=self.user_name,
@@ -91,9 +104,10 @@ class GumSource:
                     raw=update,
                 )
 
-                result = handler(event)
+                result = effective_handler(event)
                 if asyncio.iscoroutine(result):
                     await result
+                self._last_sent_at = now
 
             gum_instance.register_update_handler(_on_update)
             await asyncio.Future()
