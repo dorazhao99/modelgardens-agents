@@ -18,23 +18,15 @@
 # ---------------------------------------------------------------------------
 projects:
   - name: "AutoMetrics Release"
-    description: "Working on a website demo, polishing the overleaf, responding to ICLR reviews, and running some final experiments for the AutoMetrics paper."
+    description: "Working on a website demo, polishing the overleaf, responding to ICLR reviews, and running some final experiments for the AutoMetrics paper.  The primary focus right now is responding to my iclr open review feedback.  The paper is titled “AutoMetrics: Approximate Human Judgments with Automatically Generated Evaluators”"
     agent_enabled: true
 
   - name: "Personalization Dataset Collection"
-    description: "Working on large-scale longitudinal chatbot personalization data collection.  This project requires IRB approval."
+    description: "Working on large-scale longitudinal chatbot personalization data collection.  This project requires IRB approval.  The idea behind the project is to have people interact over the course of months with personalized chatbots and then we will build a dataset from their feedback and interactions.  This is a collaboration with UMD, USC, Notre Dame, Stanford, and UW."
     agent_enabled: true
 
-  - name: "NLP Retreat Planning"
-    description: "Organizing a debate-style event for the NLP retreat (Oct 25-26)."
-    agent_enabled: true
-
-  - name: "Background Agents"
-    description: "Agents that observe the user's work and when the user is idle or working on a separate project, they will automatically perform background tasks to help the user.  Name may be changed to 'Precursor'"
-    agent_enabled: true
-
-  - name: "HW3 Assignment Creation"
-    description: "Working on creating a homework assignment for Diyi's CS329X course.  The assignment involves setting up a collaborative AI-human interaction environment and also building automatic evaluation metrics for the interaction using AutoMetrics."
+  - name: "Background Agents (Precursor)"
+    description: "Agents that observe the user's work and when the user is idle or working on a separate project, they will automatically perform background tasks to help the user.  The focus is on building agents that predict what your are GOING to work on next and see how they can help with that.  This is my current rotation project with Michael Bernstein and I am almost done prototyping it and moving more towards getting feedback, improving the system, and writing the paper."
     agent_enabled: true
 
   - name: "Logistics"
@@ -48,3 +40,11 @@ projects:
   - name: "Health"
     description: "Work related to my health.  This includes tasks such as scheduling a doctor's appointment, buying a new pair of glasses, getting a flu shot, working out, etc."
     agent_enabled: false
+
+  - name: "Percy Rotation"
+    description: "I have an upcoming rotation with Percy Liang.  A rotation in the CS PhD means you spend 3 months working on a project with that professor.  We are talking about wokring on some interesting ideas surrounding (1) creating a user interface that enables you to audit, trust, and approve of computer use agent behavior, (2) studying “scaling laws” for domain expert annotation efforts (e.g. if you have 1 hour, or 4 hours, or 24 hours of expert time, how should you use that to collect/curate training data for an LLM training run to make it good at their domain), or (3) Integrating the DSPy programming framework with the Marin LLM training framework to see what training recipes would make LLMs better at DSPy style structured outputs."
+    agent_enabled: true
+
+  - name: "Cotomata"
+    description: "Right now coding agents work mostly independently (such as when you prompt it to take action), but we forsee a future where you deploy several parallel coding agents and they need to communicate plans and intent with one another.  I am helping with adding some eval tasks to this research project that test modifying the DSPy repo.  I am also observing some of these agent trajectories and identifying their failures."
+    agent_enabled: true

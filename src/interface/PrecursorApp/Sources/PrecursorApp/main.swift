@@ -1294,17 +1294,17 @@ struct SystemSettingsView: View {
                 GroupBox("Weights (0.0–5.0)") {
                     HStack {
                         Text("Value").frame(width: 160, alignment: .leading)
-                        Slider(value: $vm.settings.valueWeight, in: 0.0...5.0, step: 0.1)
+                        Slider(value: $vm.settings.valueWeight, in: 0.0...5.0, step: 0.25)
                         Text(String(format: "%.2f", vm.settings.valueWeight)).frame(width: 60, alignment: .trailing)
                     }
                     HStack {
                         Text("Feasibility").frame(width: 160, alignment: .leading)
-                        Slider(value: $vm.settings.feasibilityWeight, in: 0.0...5.0, step: 0.1)
+                        Slider(value: $vm.settings.feasibilityWeight, in: 0.0...5.0, step: 0.25)
                         Text(String(format: "%.2f", vm.settings.feasibilityWeight)).frame(width: 60, alignment: .trailing)
                     }
                     HStack {
                         Text("Preference Alignment").frame(width: 160, alignment: .leading)
-                        Slider(value: $vm.settings.userPreferenceAlignmentWeight, in: 0.0...5.0, step: 0.1)
+                        Slider(value: $vm.settings.userPreferenceAlignmentWeight, in: 0.0...5.0, step: 0.25)
                         Text(String(format: "%.2f", vm.settings.userPreferenceAlignmentWeight)).frame(width: 60, alignment: .trailing)
                     }
                 }
@@ -1317,7 +1317,7 @@ struct SystemSettingsView: View {
                     }
                     HStack {
                         Text("Deployment Threshold").frame(width: 160, alignment: .leading)
-                        Slider(value: $vm.settings.deploymentThreshold, in: 0.0...1.0, step: 0.01)
+                        Slider(value: $vm.settings.deploymentThreshold, in: 0.0...1.0, step: 0.05)
                         Text(String(format: "%.2f", vm.settings.deploymentThreshold)).frame(width: 60, alignment: .trailing)
                     }
                     HStack {
@@ -1341,7 +1341,7 @@ struct SystemSettingsView: View {
                         }
                         HStack {
                             Text("Time Threshold (minutes)").frame(width: 220, alignment: .leading)
-                            Slider(value: $vm.settings.departureTimeThresholdMinutes, in: 0...120, step: 1)
+                            Slider(value: $vm.settings.departureTimeThresholdMinutes, in: 0...120, step: 5)
                             Text(String(format: "%.0f", vm.settings.departureTimeThresholdMinutes)).frame(width: 60, alignment: .trailing)
                         }
                         Divider().padding(.vertical, 4)
@@ -1355,14 +1355,14 @@ struct SystemSettingsView: View {
                         }
                         HStack {
                             Text("Absence Threshold (minutes)").frame(width: 220, alignment: .leading)
-                            Slider(value: $vm.settings.arrivalTimeThresholdMinutes, in: 0...240, step: 1)
+                            Slider(value: $vm.settings.arrivalTimeThresholdMinutes, in: 0...240, step: 5)
                             Text(String(format: "%.0f", vm.settings.arrivalTimeThresholdMinutes)).frame(width: 60, alignment: .trailing)
                         }
                         Divider().padding(.vertical, 4)
                         Text("Observation Cooldown (Gum)").font(.system(size: 12, weight: .semibold))
                         HStack {
                             Text("Cooldown (seconds)").frame(width: 220, alignment: .leading)
-                            Slider(value: $vm.settings.observationCooldownSeconds, in: 0...600, step: 5)
+                            Slider(value: $vm.settings.observationCooldownSeconds, in: 0...600, step: 10)
                             Text(String(format: "%.0f", vm.settings.observationCooldownSeconds)).frame(width: 60, alignment: .trailing)
                         }
                     }
