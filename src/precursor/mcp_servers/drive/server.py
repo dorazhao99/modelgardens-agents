@@ -32,6 +32,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
+from google.auth.exceptions import RefreshError
 
 from mcp.server.fastmcp import FastMCP
 
@@ -67,8 +68,20 @@ def _get_credentials(
             creds = None
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
+            try:
+                creds.refresh(Request())
+            except RefreshError:
+                # Token refresh failed (e.g., invalid_grant: expired or revoked).
+                # Delete the cached token and force a fresh login.
+                try:
+                    if os.path.exists(token_file):
+                        os.remove(token_file)
+                except Exception:
+                    # Best-effort cleanup; continue to re-auth regardless.
+                    pass
+                creds = None
+
+        if not creds or not creds.valid:
             flow = InstalledAppFlow.from_client_secrets_file(credentials_file, scopes)
             creds = flow.run_local_server(port=0)
         with open(token_file, "wb") as f:

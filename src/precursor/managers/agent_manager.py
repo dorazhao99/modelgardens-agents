@@ -5,6 +5,10 @@ import logging
 from typing import Optional, List, Dict, Any
 import subprocess
 import sys
+import os
+from datetime import datetime
+import uuid
+from platformdirs import user_data_dir
 
 from precursor.scratchpad import render as scratchpad_render
 from precursor.components.task_proposer.task_proposer_pipeline import (
@@ -94,6 +98,21 @@ class AgentManager:
         Main entrypoint: propose and score background-agent tasks for this project.
         """
         logger.info("agent_manager: running for project %s", project_name)
+
+        # Respect per-project toggle: if agent is disabled, skip induction entirely.
+        if not config_loader.is_project_agent_enabled(project_name):
+            logger.info(
+                "agent_manager: project %s has agent_enabled=false; skipping task proposal",
+                project_name,
+            )
+            return {
+                "project": project_name,
+                "future_goals": [],
+                "goal_to_milestones": {},
+                "agent_tasks": [],
+                "task_assessments": [],
+                "candidates": [],
+            }
 
         # Always refresh settings so live edits to YAML take effect
         self._refresh_settings()
@@ -212,11 +231,21 @@ class AgentManager:
         Spawn a background MCP Agent process for each candidate task.
         Uses the CLI entrypoint `python -m precursor.cli.mcp_agent_cli`.
         """
+        # Prepare per-user logs directory: <user_data_dir>/precursor/logs/
+        data_dir = user_data_dir("precursor")
+        logs_dir = os.path.join(data_dir, "logs")
+        os.makedirs(logs_dir, exist_ok=True)
+
         for c in candidates:
             task_desc = (c.get("task_description") or "").strip()
             if not task_desc:
                 continue
             try:
+                # Timestamped log file with short UUID suffix
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                short_id = uuid.uuid4().hex[:4]
+                log_path = os.path.join(logs_dir, f"{ts}_{short_id}.log")
+
                 cmd = [
                     sys.executable,
                     "-m",
@@ -226,8 +255,14 @@ class AgentManager:
                     "--task",
                     task_desc,
                 ]
-                logger.info("agent_manager: deploying MCPAgent for project=%r task=%r", project_name, task_desc)
-                # Run detached/background; do not wait
-                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                logger.info(
+                    "agent_manager: deploying MCPAgent for project=%r task=%r log=%s",
+                    project_name,
+                    task_desc,
+                    log_path,
+                )
+                # Run detached/background; redirect stdout/stderr to per-process log file
+                with open(log_path, "a", encoding="utf-8") as log_fh:
+                    subprocess.Popen(cmd, stdout=log_fh, stderr=log_fh)
             except Exception:
                 logger.exception("agent_manager: failed to spawn MCPAgent for task %r", task_desc)

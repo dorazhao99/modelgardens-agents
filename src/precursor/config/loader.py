@@ -72,7 +72,7 @@ def load_projects_yaml() -> Dict[str, Any]:
             {
                 "name": "AutoMetrics Release",
                 "description": "...",
-                "enabled": true   # optional
+                "agent_enabled": true   # optional 
             },
             ...
         ]
@@ -117,6 +117,15 @@ def load_settings_yaml() -> Dict[str, Any]:
 # convenience helpers
 # ---------------------------------------------------------------------------
 
+def _is_agent_enabled_in_project(project: Dict[str, Any]) -> bool:
+    """
+    Determine whether a project's background agent is enabled.
+    Prefer the explicit 'agent_enabled' flag
+    Default to True if not specified.
+    """
+    return bool(project.get("agent_enabled", True))
+
+
 def get_project_names(only_enabled: bool = True) -> list[str]:
     """
     Return a list of project names, optionally filtering to only enabled ones.
@@ -125,12 +134,23 @@ def get_project_names(only_enabled: bool = True) -> list[str]:
     projects = cfg.get("projects", [])
     names: list[str] = []
     for p in projects:
-        if only_enabled and not p.get("enabled", True):
+        if only_enabled and not _is_agent_enabled_in_project(p):
             continue
         name = p.get("name")
         if name:
             names.append(name)
     return names
+
+
+def is_project_agent_enabled(project_name: str) -> bool:
+    """
+    Return True if the given project's background agent is enabled.
+    """
+    cfg = load_projects_yaml()
+    for p in cfg.get("projects", []):
+        if p.get("name") == project_name:
+            return _is_agent_enabled_in_project(p)
+    return False
 
 
 def get_user_name() -> str:

@@ -153,13 +153,21 @@ python -m precursor.main --mode gum --output-csv dev/survey/pipeline_run.csv
 ```bash
 python -m precursor.main --mode gum --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv
 ```
+- Log ALL proposed tasks with scores (one row per proposed task; includes columns: task_description, reasoning, scores, true_score, score_ratio, selected):
+```bash
+python -m precursor.main --mode gum --agent-proposals-csv dev/survey/pipeline_run.proposals.csv
+```
+- Log high-level goals and their milestones (rows: project, goal, milestone):
+```bash
+python -m precursor.main --mode gum --agent-goals-milestones-csv dev/survey/pipeline_run.goals_milestones.csv
+```
 - Save per-event screenshots (GUM mode) and include their paths in the CSV (`screenshot_path`):
 ```bash
 python -m precursor.main --mode gum --screenshot-dir dev/survey/screenshots --output-csv dev/survey/pipeline_run.csv
 ```
 - All logs + screenshots:
 ```bash
-python -m precursor.main --mode gum --output-csv dev/survey/pipeline_run.csv --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv --screenshot-dir dev/survey/screenshots
+python -m precursor.main --mode gum --output-csv dev/survey/pipeline_run.csv --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv --agent-proposals-csv dev/survey/pipeline_run.proposals.csv --agent-goals-milestones-csv dev/survey/pipeline_run.goals_milestones.csv --screenshot-dir dev/survey/screenshots
 ```
 
 Other useful flags:

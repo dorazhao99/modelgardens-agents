@@ -122,6 +122,117 @@ class _AgentCsvLogger:
                 )
 
 
+class _AgentProposalsCsvLogger:
+    """
+    Append ALL proposed tasks (assessments) with their scores to a CSV.
+    Includes a 'selected' column indicating whether it made the final candidate list.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._header_written = self.path.exists() and self.path.stat().st_size > 0
+
+    def log_proposals(self, *, project: str, result: Dict[str, Any]) -> None:
+        fieldnames = [
+            "project",
+            "task_description",
+            "reasoning",
+            "value_score",
+            "feasibility_score",
+            "safety_score",
+            "user_preference_alignment_score",
+            "true_score",
+            "score_ratio",
+            "selected",
+        ]
+        assessments = result.get("task_assessments", []) or []
+        if not assessments:
+            return
+        # Build a quick lookup for selected candidates by task_description
+        candidates = result.get("candidates", []) or []
+        selected_set = {c.get("task_description", "") for c in candidates}
+
+        # Pull weights to compute composite scores consistent with AgentManager
+        try:
+            import precursor.config.loader as _loader
+            settings = _loader.get_settings() or {}
+        except Exception:
+            settings = {}
+        value_w = float(settings.get("value_weight", 2.0))
+        feas_w = float(settings.get("feasibility_weight", 1.5))
+        align_w = float(settings.get("user_preference_alignment_weight", 0.5))
+        denom = (value_w + feas_w + align_w)
+        max_score = 10.0 * denom if denom > 0 else 1.0
+
+        def _as_dict(obj: Any) -> Dict[str, Any]:
+            if isinstance(obj, dict):
+                return obj
+            try:
+                return dict(obj)
+            except Exception:
+                return {"task_description": str(obj)}
+
+        with self.path.open("a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            if not self._header_written:
+                writer.writeheader()
+                self._header_written = True
+            for a in assessments:
+                ad = _as_dict(a)
+                desc = (ad.get("task_description") or "").strip()
+                reasoning = ad.get("reasoning", "")
+                val = float(ad.get("value_score") or 0)
+                feas = float(ad.get("feasibility_score") or 0)
+                safe = float(ad.get("safety_score") or 0)  # not used in true_score; logged for completeness
+                align = float(ad.get("user_preference_alignment_score") or 0)
+                true_score = val * value_w + feas * feas_w + align * align_w
+                ratio = (true_score / max_score) if max_score > 0 else 0.0
+                writer.writerow(
+                    {
+                        "project": project,
+                        "task_description": desc,
+                        "reasoning": reasoning,
+                        "value_score": val,
+                        "feasibility_score": feas,
+                        "safety_score": safe,
+                        "user_preference_alignment_score": align,
+                        "true_score": true_score,
+                        "score_ratio": ratio,
+                        "selected": "yes" if desc in selected_set else "no",
+                    }
+                )
+
+
+class _AgentGoalsMilestonesCsvLogger:
+    """
+    Append high-level goals and their milestones to a single CSV.
+    Rows: (project, goal, milestone) – milestones may be empty for goal-only entries.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._header_written = self.path.exists() and self.path.stat().st_size > 0
+
+    def log_structure(self, *, project: str, result: Dict[str, Any]) -> None:
+        fieldnames = ["project", "goal", "milestone"]
+        future_goals = list(result.get("future_goals", []) or [])
+        g2m: Dict[str, Any] = dict(result.get("goal_to_milestones", {}) or {})
+        if not future_goals and not g2m:
+            return
+        with self.path.open("a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            if not self._header_written:
+                writer.writeheader()
+                self._header_written = True
+            # Log each goal row, then its milestones
+            for goal in future_goals:
+                writer.writerow({"project": project, "goal": goal, "milestone": ""})
+                for ms in (g2m.get(goal, []) or []):
+                    writer.writerow({"project": project, "goal": goal, "milestone": ms})
+
+
 def _resolve_scratchpad_db_path(mode: str) -> Path:
     """
     Decide which DB path to use for this run.
@@ -283,6 +394,16 @@ async def main() -> None:
         help="If set, log candidate tasks selected by AgentManager to this CSV.",
     )
     parser.add_argument(
+        "--agent-proposals-csv",
+        default=None,
+        help="If set, log ALL proposed tasks and their scores to this CSV.",
+    )
+    parser.add_argument(
+        "--agent-goals-milestones-csv",
+        default=None,
+        help="If set, log high-level goals and their milestones to this CSV.",
+    )
+    parser.add_argument(
         "--screenshot-dir",
         default=None,
         help="If set, save screenshots (GUM mode) here and log their paths.",
@@ -333,10 +454,16 @@ async def main() -> None:
     # optional CSV logger
     csv_logger: Optional[_CsvLogger] = None
     agent_csv_logger: Optional[_AgentCsvLogger] = None
+    agent_proposals_logger: Optional[_AgentProposalsCsvLogger] = None
+    agent_goals_logger: Optional[_AgentGoalsMilestonesCsvLogger] = None
     if args.output_csv:
         csv_logger = _CsvLogger(Path(args.output_csv))
     if args.agent_output_csv:
         agent_csv_logger = _AgentCsvLogger(Path(args.agent_output_csv))
+    if getattr(args, "agent_proposals_csv", None):
+        agent_proposals_logger = _AgentProposalsCsvLogger(Path(args.agent_proposals_csv))
+    if getattr(args, "agent_goals_milestones_csv", None):
+        agent_goals_logger = _AgentGoalsMilestonesCsvLogger(Path(args.agent_goals_milestones_csv))
     screenshot_dir: Optional[Path] = Path(args.screenshot_dir).expanduser().resolve() if args.screenshot_dir else None
 
     # Load transition sensitivity settings (with safe defaults)
@@ -356,6 +483,14 @@ async def main() -> None:
     if args.mode == "gum" and _arg_interval is not None and _arg_interval != 180.0:
         gum_cooldown = _arg_interval
 
+    def _on_trigger(project: str, result: Dict[str, Any]) -> None:
+        if agent_csv_logger is not None:
+            agent_csv_logger.log_candidates(project=project, result=result)
+        if 'agent_proposals_logger' in locals() and agent_proposals_logger is not None:
+            agent_proposals_logger.log_proposals(project=project, result=result)
+        if 'agent_goals_logger' in locals() and agent_goals_logger is not None:
+            agent_goals_logger.log_structure(project=project, result=result)
+
     transition_obs = ProjectActivityObserver(
         history=history,
         agent_manager=agent_mgr,
@@ -364,9 +499,7 @@ async def main() -> None:
         min_entries_previous_segment=dep_min_prev,
         time_threshold=timedelta(minutes=dep_time_min),
         on_trigger=(
-            (lambda project, result: agent_csv_logger.log_candidates(project=project, result=result))
-            if agent_csv_logger is not None
-            else None
+            _on_trigger if (agent_csv_logger or agent_proposals_logger or agent_goals_logger) else None
         ),
     )
     # Arrival observer → calls UIManager, which will notify only if pending tasks exist.
