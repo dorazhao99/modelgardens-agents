@@ -13,7 +13,9 @@ import dspy
 from precursor.mcp_loader.loader import load_enabled_mcp_servers
 from precursor.toolset.builder import build_toolset
 from precursor.config.loader import get_user_profile
+import logging
 
+logging.getLogger("precursor.agents").setLevel(logging.INFO)
 
 @dataclass
 class AgentResult:
@@ -220,6 +222,11 @@ class MCPAgent:
         self.model = model or dspy.settings.lm
 
     def run(self, project_name: str, project_context: str, task_context: str) -> AgentResult:
+
+        logger.info(f"MCPAgent: running for project {project_name}")
+        logger.info(f"MCPAgent: task context: \n===\n{task_context}\n===\n")
+        logger.info(f"MCPAgent: project context: \n===\n{project_context}\n===\n")
+
         # 1) Load MCP servers + global allow/deny filter
         bundle = load_enabled_mcp_servers()
 
@@ -227,6 +234,8 @@ class MCPAgent:
         tools = build_toolset(bundle)
 
         profile = get_user_profile()
+
+        logger.info(f"MCPAgent: user profile: \n===\n{profile}\n===\n")
 
         # 3) Run ReAct program
         with dspy.context(lm=self.model):
