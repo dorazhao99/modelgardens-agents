@@ -40,6 +40,8 @@ If you find a file that you deem unrelated, then you should not include it in th
 
 Please keep your search relatively efficient and focus on finding the most relevant 1-3 documents.  If you really believe more are necessary keep looking, but often the main context can be built from finding the few BEST docs rather than excerpts from EVERY document.
 
+Avoid repeating the same search query multiple times.  If you don't get all the content you want from one query feel free to try another one.  Note that if you think the question is better suited for a general web search (not project search), you can mention that as a part of the final response and return no documents.  Other agents have general web access, but your job is to specifically build project context.
+
 ---------------------------------------------------------------------------
 Output contract
 ---------------------------------------------------------------------------
@@ -108,4 +110,5 @@ if __name__ == "__main__":
     lm = dspy.LM("openai/gpt-5-nano", api_key=os.getenv("OPENAI_API_KEY"), temperature=1.0, max_tokens=24000)
     dspy.configure(lm=lm)
     agent = ContextBuilderAgent(model=lm)
-    print(agent.run("Personalization Dataset Collection", "Generate a 5–8 slide deck skeleton plus a one-page executive summary and a 3–5 minute speaker script (saved as GeneralUserModels/gum/docs/irb_packet/{slides.md,summary.md,script.md}) covering objectives, methodology, participant protections/consent plan, technical security appendix, current metrics/status, open questions, and next steps."))
+    # print(agent.run("Personalization Dataset Collection", "Generate a 5–8 slide deck skeleton plus a one-page executive summary and a 3–5 minute speaker script (saved as GeneralUserModels/gum/docs/irb_packet/{slides.md,summary.md,script.md}) covering objectives, methodology, participant protections/consent plan, technical security appendix, current metrics/status, open questions, and next steps."))
+    print(agent.run("Misc", "Produce a one-page EPFL interviewer brief and printable cheat-sheet containing 1-line bios, 1–2 tailored hooks, 3 suggested conversational questions (with 1–2 follow-ups), 1 red-flag phrasing to avoid, and 2 representative paper links for each panel member (Tanja Käser, Sabine Süsstrunk, Martin Jaggi, Martin Schrimpf), and export it as Projects/25_Job apps/EPFL_brief.pdf."))

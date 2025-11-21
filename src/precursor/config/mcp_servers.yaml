@@ -62,3 +62,11 @@ servers:
   - id: slides
     load: "node src/precursor/mcp_servers/slides/src/index.js"
     enabled: true
+
+  - id: fetch
+    load: "python -m mcp_server_fetch --ignore-robots-txt --user-agent=Precursor/1.0"
+    enabled: true
+
+  # - id: websearch
+  #   load: "npx -y mcp-remote https://mcp.tavily.com/mcp/?tavilyApiKey=$TAVILY_API_KEY"
+  #   enabled: true

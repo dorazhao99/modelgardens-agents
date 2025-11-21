@@ -15,7 +15,8 @@ from precursor.toolset.builder import build_toolset
 from precursor.config.loader import get_user_profile
 import logging
 
-logging.getLogger("precursor.agents").setLevel(logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.getLogger("precursor.tools").setLevel(logging.INFO)
 
 @dataclass
 class AgentResult:
@@ -39,7 +40,7 @@ You are a **tool-using agent** with access to multiple MCP servers, including:
     - Project memory tools  
     (e.g., scratchpad tools + `core.store_artifact`)
     - Web search tools  
-    (e.g., websearch.brave_web_search) — use these to gather *factual external context* when needed.
+    (e.g., websearch.brave_web_search, fetch.fetch) — use these to gather *factual external context* when needed. Brave allows you to search by query then fetch allows you to get the actual contents of the webpage.
     - Slides creation and export tools  
     (e.g., slides.build_complete_presentation, slides.export_to_pdf) — capable of generating both Markdown and PDF slide decks.
     - Context-gathering agent  
@@ -222,6 +223,8 @@ class MCPAgent:
         self.model = model or dspy.settings.lm
 
     def run(self, project_name: str, project_context: str, task_context: str) -> AgentResult:
+
+        logger = logging.getLogger("precursor.agents")
 
         logger.info(f"MCPAgent: running for project {project_name}")
         logger.info(f"MCPAgent: task context: \n===\n{task_context}\n===\n")

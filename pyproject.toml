@@ -24,7 +24,14 @@ dependencies = [
   "pynput",
   "matplotlib",
   "pandas",
-  "pydantic"
+  "pydantic",
+  "mcp2py",
+  "fastmcp",
+  "mcp-server-fetch",
+  "google-api-python-client",
+  "google_auth_oauthlib",
+  "gitpython",
+  "openhands-ai"
 ]
 
 [tool.setuptools]

@@ -11,6 +11,7 @@ import os
 import shlex
 from pathlib import Path
 from typing import Any, Callable, Dict, List
+import re
 
 import yaml
 from mcp2py import load as mcp2py_load
@@ -80,7 +81,9 @@ def _build_cmd_string(load_field: Any) -> str:
         expanded_parts = [
             os.path.expandvars(os.path.expanduser(str(p))) for p in parts
         ]
-        return " ".join(shlex.quote(p) for p in expanded_parts)
+        # IMPORTANT: Do NOT add shell quotes here. mcp2py may not spawn via a shell,
+        # so quotes would be passed literally to the process.
+        return " ".join(expanded_parts)
 
     if isinstance(load_field, dict):
         cmd = load_field.get("command")
@@ -93,19 +96,35 @@ def _build_cmd_string(load_field: Any) -> str:
         cmd_expanded = os.path.expandvars(os.path.expanduser(str(cmd)))
         args_expanded = [os.path.expandvars(os.path.expanduser(str(a))) for a in args]
         parts = [cmd_expanded] + args_expanded
-        return " ".join(shlex.quote(p) for p in parts)
+        # IMPORTANT: Do NOT add shell quotes here. mcp2py may not spawn via a shell,
+        # so quotes would be passed literally to the process.
+        return " ".join(parts)
 
     raise TypeError(f"Unsupported 'load' type: {type(load_field)!r}")
 
 
 def start_server(spec: Dict[str, Any]) -> Any:
     """Spawn one MCP server via mcp2py with helpful error context."""
+    cmd: str | None = None
     try:
         cmd = _build_cmd_string(spec["load"])
         return mcp2py_load(cmd, auto_auth=True, headers=spec.get("headers"))
     except Exception as e:
         sid = spec.get("id", "<unknown-id>")
-        raise RuntimeError(f"Failed to start MCP '{sid}' with command: {spec['load']}") from e
+        # Build a richer error with expanded command and unresolved env var hints
+        msg = f"Failed to start MCP '{sid}' with command: {spec['load']}"
+        if cmd:
+            msg += f" (expanded: {cmd})"
+            # Detect unresolved environment variables like $VAR or ${VAR}
+            unresolved = []
+            for match in re.findall(r"\$(\{?[A-Za-z_][A-Za-z0-9_]*\}?)", cmd):
+                var_name = match.strip("{}")
+                if not os.environ.get(var_name):
+                    unresolved.append(var_name)
+            if unresolved:
+                uniq = ", ".join(sorted(set(unresolved)))
+                msg += f" — unresolved env vars: {uniq}"
+        raise RuntimeError(msg) from e
 
 
 # ----------------------------

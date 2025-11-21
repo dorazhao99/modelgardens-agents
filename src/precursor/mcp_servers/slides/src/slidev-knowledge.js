@@ -187,6 +187,7 @@ export const generateSlidevGuidance = (presentationType = "technical") => {
       "Choose layouts that match your content type",
       "Include syntax highlighting for code",
       "Keep slides visually consistent",
+      "When using two column structure use the format `Left: [left side content]\\nRight: [right side content]` so the parser formats the document correctly"
     ],
   };
 };
