@@ -215,3 +215,6 @@ dist/
 package-lock.json
 
 .build/
+
+dev/survey/data_collection/11_20_experiments/
+dev/survey/scratchpad*
