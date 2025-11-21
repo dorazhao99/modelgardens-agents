@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from typing import List, Optional, Any
+from typing import Set
 
 import dspy
 
@@ -47,6 +48,7 @@ class StateManager:
         objectives_inducer: Optional[ObjectivesInducer] = None,
         project_classifier: Optional[CurrentProjectClassifier] = None,
         scratchpad_updater: Optional[ScratchpadUpdater] = None,
+        excluded_projects: Optional[Set[str]] = None,
     ) -> None:
         self.history = history or ProjectHistory()
         self.objectives_inducer = objectives_inducer or ObjectivesInducer()
@@ -55,6 +57,10 @@ class StateManager:
             max_scratchpad_chars=1200,
         )
         self.scratchpad_updater = scratchpad_updater or ScratchpadUpdater()
+        # normalized lowercase names for exclusion
+        self.excluded_projects: Optional[Set[str]] = (
+            {p.strip().lower() for p in excluded_projects} if excluded_projects else None
+        )
 
     # ------------------------------------------------------------------
     # public API
@@ -106,7 +112,26 @@ class StateManager:
                 recent_entries[0].objectives if recent_entries else []
             )
 
-            # 5) update the scratchpad for the current project
+            # 5) record in history (we store the goals so future edits can see them)
+            self.history.append(
+                timestamp=event.timestamp,
+                project=current_project,
+                objectives=current_objectives_rich,
+            )
+
+            # Early exit if project is excluded: do not touch scratchpad
+            if self.excluded_projects and (current_project or "").strip().lower() in self.excluded_projects:
+                logger.info("event classified into excluded project=%s; skipping scratchpad", current_project)
+                return {
+                    "project": current_project,
+                    "induced_goals": [g.model_dump() for g in goals],
+                    "induction_reasoning": reasoning,
+                    "scratchpad_edits_summary": "",
+                    "scratchpad_text": "",
+                    "skipped_excluded_project": True,
+                }
+
+            # 6) update the scratchpad for the current project
             edits_summary, refreshed_scratchpad = self.scratchpad_updater(
                 project_name=current_project,
                 user_context=event.context_update,
@@ -123,12 +148,7 @@ class StateManager:
                 "scratchpad updated for %s: %s", current_project, edits_summary
             )
 
-            # 6) record in history (we store the goals so future edits can see them)
-            self.history.append(
-                timestamp=event.timestamp,
-                project=current_project,
-                objectives=current_objectives_rich,
-            )
+            
 
             result = {
                 "project": current_project,

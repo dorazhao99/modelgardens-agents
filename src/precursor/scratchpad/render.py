@@ -116,7 +116,7 @@ def _render_project_resources(all_rows: List[Dict[str, Any]]) -> str:
 # public renderer
 # ---------------------------------------------------------------------------
 
-def render_project_scratchpad(project_name: str) -> str:
+def render_project_scratchpad(project_name: str, skip_sections: List[str] = ["Next Steps"]) -> str:
     """
     Render a single project's scratchpad to a Markdown-like string.
 
@@ -162,7 +162,7 @@ def render_project_scratchpad(project_name: str) -> str:
         # - Suggestions
         # - Notes
         # To re-enable, remove or comment out this conditional block.
-        if section in {"Next Steps"}:
+        if section in skip_sections:
             continue
         # END TEMP_DISABLE_SELECTED_SECTIONS
 

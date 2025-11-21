@@ -94,13 +94,33 @@ class CSVSimulatorObserver:
         reader = csv.DictReader(text.splitlines())
         return list(reader)
 
+    def _parse_timestamp(self, ts_raw: str) -> datetime:
+        """
+        Accepts either:
+        - legacy format: YYYYMMDD_HHMMSS (UTC)
+        - ISO 8601: e.g., 2025-11-18T20:29:01.399452+00:00 (any offset → converted to UTC)
+        Falls back to 'now (UTC)' if parsing fails or empty.
+        """
+        s = (ts_raw or "").strip()
+        if not s:
+            return datetime.now(timezone.utc)
+        # Try legacy format first
+        try:
+            return datetime.strptime(s, "%Y%m%d_%H%M%S").replace(tzinfo=timezone.utc)
+        except Exception:
+            pass
+        # Try ISO 8601 (handle trailing 'Z' by normalizing to +00:00)
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
     def _row_to_event(self, row: dict) -> ContextEvent:
         # timestamp like "20251020_144855"
         ts_raw = row.get("timestamp", "").strip()
-        if ts_raw:
-            ts = datetime.strptime(ts_raw, "%Y%m%d_%H%M%S").replace(tzinfo=timezone.utc)
-        else:
-            ts = datetime.now(timezone.utc)
+        ts = self._parse_timestamp(ts_raw)
 
         screenshot_img: Optional[dspy.Image] = None
         screenshot_path = (row.get("screenshot_path") or "").strip()

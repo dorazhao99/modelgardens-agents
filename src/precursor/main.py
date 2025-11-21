@@ -8,7 +8,7 @@ import logging
 import os
 from datetime import timedelta
 from pathlib import Path
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, Set
 import re
 import base64
 import io
@@ -422,6 +422,11 @@ async def main() -> None:
         action="store_true",
         help="Disable deployment; only score/log tasks (default: deploy enabled).",
     )
+    parser.add_argument(
+        "--exclude-projects",
+        default="",
+        help="Comma-separated list of project names to exclude entirely. Excluded events are skipped and do not count toward --max-steps.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -513,6 +518,23 @@ async def main() -> None:
         on_trigger=None,
     )
 
+    # parse excluded projects (normalized to lowercase)
+    excluded_projects: Optional[Set[str]] = None
+    if getattr(args, "exclude_projects", ""):
+        parts = [p.strip().lower() for p in str(args.exclude_projects).split(",")]
+        filtered = {p for p in parts if p}
+        excluded_projects = filtered if filtered else None
+
+    # re-create state manager with excluded projects knowledge
+    # (StateManager will classify and skip scratchpad/history if excluded)
+    state_mgr = StateManager(history=history)
+    if excluded_projects:
+        # set attribute if supported; otherwise StateManager will handle gracefully when None
+        try:
+            state_mgr.excluded_projects = excluded_projects
+        except Exception:
+            pass
+
     # run
     if args.mode == "gum":
         logger.info("starting in GUM mode")
@@ -536,7 +558,8 @@ if __name__ == "__main__":
 
 # Example usage:
 # Full (GUM) run with both logs:
-#   python -m precursor.main --mode gum --output-csv dev/survey/pipeline_run.csv --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv --screenshot-dir dev/survey/screenshots --log-level INFO
+#   python -m precursor.main --mode gum --output-csv dev/survey/pipeline_run.csv --agent-output-csv dev/survey/pipeline_run.agent_candidates.csv --agent-proposals-csv dev/survey/pipeline_run.proposals.csv --agent-goals-milestones-csv dev/survey/pipeline_run.goals_milestones.csv --screenshot-dir dev/survey/screenshots --log-level INFO
 #
 # CSV replay with fast mode and both logs:
+#   python -m precursor.main --mode csv --csv-path dev/survey/pipeline_run.csv --fast --output-csv dev/survey/data_collection/11_20_experiments/full_pipeline/log.csv --agent-output-csv dev/survey/data_collection/11_20_experiments/full_pipeline/agent_candidates.csv --agent-proposals-csv dev/survey/data_collection/11_20_experiments/full_pipeline/proposals.csv --agent-goals-milestones-csv dev/survey/data_collection/11_20_experiments/full_pipeline/goals_milestones.csv --force-reset --max-steps 75 --no-deploy --exclude-projects "Cotomata"
 #   python -m precursor.main --mode csv --csv-path dev/survey/context_log.csv --fast --output-csv dev/survey/pipeline_run_no_next_steps.csv --agent-output-csv dev/survey/pipeline_run_no_next_steps.agent_candidates.csv --log-level INFO --force-reset --max-steps 25 --no-deploy
