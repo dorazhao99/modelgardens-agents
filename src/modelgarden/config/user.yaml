@@ -1,0 +1,19 @@
+# config/user.yaml
+# ---------------------------------------------------------------------------
+# User profile / preferences
+# ---------------------------------------------------------------------------
+# This file is meant for LLM-facing components that want to tailor behavior
+# to *you* (priorities, personality, preferences, etc).
+# ---------------------------------------------------------------------------
+
+name: "Dora Zhao"
+description: |
+  I am a CS PhD student (HCI/NLP) at Stanford.  
+  I work across several concurrent research projects.
+  I am interested in building personalized LLM tooling.
+agent_goals: |
+  I am interested in an agent that can help organize my work.
+  I would especially like an agent that keeps track of progress and if I have a meeting coming up for a particular project it can compile my results into slides or a report.
+  I also think an agent that finds related work and performs background literature review would be helpful.
+  Feedback on my writing is another welcome form of assistance.
+  I don't mind for the agent to be creative about other forms of assistance!!
