@@ -52,8 +52,13 @@ servers:
     enabled: true
 
   - id: fetch
-    load: "python -m mcp_server_fetch --ignore-robots-txt --user-agent=Precursor/1.0"
+    load: "python -m mcp_server_fetch --ignore-robots-txt --user-agent=ModelGarden/1.0"
     enabled: true
+  
+  - id: ical 
+    load: "python -m modelgarden.mcp_servers.ical.server"
+    enabled: true
+
 
   # - id: websearch
   #   load: "npx -y mcp-remote https://mcp.tavily.com/mcp/?tavilyApiKey=$TAVILY_API_KEY"

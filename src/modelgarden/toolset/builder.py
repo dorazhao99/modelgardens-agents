@@ -15,15 +15,15 @@ import inspect
 import dspy
 
 # Core environment tools (direct wrappers; docstrings are important for DSPy)
-from precursor.core_tools.artifacts import store_artifact
-from precursor.scratchpad.scratchpad_tools import (
-    append_to_scratchpad,
-    remove_from_scratchpad,
-    edit_in_scratchpad,
-    get_refreshed_scratchpad,
-)
-from precursor.core_tools.context_agent_tool import gather_project_context
-from precursor.core_tools.fast_find_tool import search_folders_fast
+# from modelgarden.core_tools.artifacts import store_artifact
+# from modelgarden.scratchpad.scratchpad_tools import (
+#     append_to_scratchpad,
+#     remove_from_scratchpad,
+#     edit_in_scratchpad,
+#     get_refreshed_scratchpad,
+# )
+# from modelgarden.core_tools.context_agent_tool import gather_project_context
+from modelgarden.core_tools.fast_find_tool import search_folders_fast
 
 def _namespace_tool(server_id: str, fn: Any) -> Tuple[str, Any]:
     name = getattr(fn, "__name__", "tool").strip() or "tool"
@@ -35,7 +35,7 @@ def _with_logging(ns_name: str, fn: Any) -> Any:
     We attach the original signature to __signature__ so that agent tooling
     (which introspects parameter names and docstrings) sees the original API.
     """
-    logger = logging.getLogger("precursor.tools")
+    logger = logging.getLogger("modelgarden.tools")
     sig = inspect.signature(fn)
 
     if inspect.iscoroutinefunction(fn):
@@ -96,14 +96,17 @@ def build_toolset(servers_bundle) -> List[dspy.Tool]:
                 tools.append(_wrap_as_dspy_tool(ns_name, real_fn))
 
     # 2) Core tools (namespaced as 'core.*')
+    # core_tool_fns = [
+    #     store_artifact,            # record artifacts (short summary visible; long_summary in metadata)
+    #     append_to_scratchpad,      # add notes/resources/objectives/etc.
+    #     remove_from_scratchpad,    # remove by display index
+    #     edit_in_scratchpad,        # edit by display index
+    #     get_refreshed_scratchpad,  # render current scratchpad
+    #     gather_project_context,    # run context-building sub-agent (uses gpt-5-nano)
+    #     search_folders_fast,       # fast folder search (prefer over filesystem.search_files for dirs)
+    # ]
     core_tool_fns = [
-        store_artifact,            # record artifacts (short summary visible; long_summary in metadata)
-        append_to_scratchpad,      # add notes/resources/objectives/etc.
-        remove_from_scratchpad,    # remove by display index
-        edit_in_scratchpad,        # edit by display index
-        get_refreshed_scratchpad,  # render current scratchpad
-        gather_project_context,    # run context-building sub-agent (uses gpt-5-nano)
-        search_folders_fast,       # fast folder search (prefer over filesystem.search_files for dirs)
+        search_folders_fast
     ]
     for core_fn in core_tool_fns:
         ns = f"core.{getattr(core_fn, '__name__', 'tool')}"
