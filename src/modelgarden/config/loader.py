@@ -96,15 +96,6 @@ def load_user_yaml() -> Dict[str, Any]:
     return _load_yaml(path)
 
 
-def load_mcp_servers_yaml() -> Dict[str, Any]:
-    """
-    Load `mcp_servers.yaml`, using PRECURSOR_MCP_SERVERS_FILE if set.
-
-    This file can declare which MCP servers to load or toggle.
-    """
-    path = _resolve_yaml_path("mcp_servers.yaml", env_var="PRECURSOR_MCP_SERVERS_FILE")
-    return _load_yaml(path)
-
 def load_settings_yaml() -> Dict[str, Any]:
     """
     Load `settings.yaml`, using PRECURSOR_SETTINGS_FILE if set.
@@ -198,9 +189,15 @@ def get_settings() -> Dict[str, Any]:
     """
     return load_settings_yaml()
 
-def load_mcp_servers_yaml() -> Dict[str, Any]:
+def load_mcp_servers_yaml(
+    credentials_path: str | None = None,
+) -> Dict[str, Any]:
     """
     Load `mcp_servers.yaml`, using PRECURSOR_MCP_SERVERS_FILE if set.
+
+    If credentials_path is provided, sets GOOGLE_CREDENTIALS_JSON in the
+    environment so the Drive MCP server uses that path for OAuth credentials.
+    If token_pickle_path is provided, sets GOOGLE_TOKEN_PICKLE for the token cache.
 
     Expected shape:
     {
@@ -221,5 +218,13 @@ def load_mcp_servers_yaml() -> Dict[str, Any]:
         ]
     }
     """
+    
+
+
     path = _resolve_yaml_path("mcp_servers.yaml", env_var="PRECURSOR_MCP_SERVERS_FILE")
-    return _load_yaml(path)
+    config = _load_yaml(path)
+    # Dynamically update the load path for the drive server
+    # config['servers'][0]['load'] = f"python mcp_directory.py --server_type drive --credentials {credentials_path}"
+
+    config['servers'][0]['load'] = f"./mcp_directory --server_type drive --credentials {credentials_path}"
+    return config

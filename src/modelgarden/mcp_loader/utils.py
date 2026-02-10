@@ -34,9 +34,11 @@ def load_yaml_override(path: str) -> Dict[str, Any]:
 # Env & process setup helpers
 # ----------------------------
 def apply_env(spec: Dict[str, Any]) -> None:
-    """Apply per-server env vars and inject USER_NAME for GUM."""
+    """Apply per-server env vars and inject USER_NAME for GUM.
+    Does not overwrite env vars that are already set (CLI, shell, .env take precedence).
+    """
     for k, v in (spec.get("env") or {}).items():
-        if v is not None:
+        if v is not None and k not in os.environ:
             # Expand ~ and ${VARS} for portability
             os.environ[k] = os.path.expandvars(os.path.expanduser(str(v)))
 
@@ -105,10 +107,26 @@ def _build_cmd_string(load_field: Any) -> str:
 
 def start_server(spec: Dict[str, Any]) -> Any:
     """Spawn one MCP server via mcp2py with helpful error context."""
+    import sys
+    import warnings
+    
     cmd: str | None = None
     try:
         cmd = _build_cmd_string(spec["load"])
-        return mcp2py_load(cmd, auto_auth=True, headers=spec.get("headers"))
+        
+        # Suppress stderr warnings during MCP server startup to avoid
+        # "I/O operation on closed file" errors in PyInstaller bundles
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            try:
+                # Temporarily suppress any I/O errors
+                return mcp2py_load(cmd, auto_auth=True, headers=spec.get("headers"))
+            except (ValueError, OSError) as io_err:
+                if "closed file" in str(io_err):
+                    # This is a known issue with PyInstaller - ignore and retry
+                    return mcp2py_load(cmd, auto_auth=True, headers=spec.get("headers"))
+                raise
+                
     except Exception as e:
         sid = spec.get("id", "<unknown-id>")
         # Build a richer error with expanded command and unresolved env var hints

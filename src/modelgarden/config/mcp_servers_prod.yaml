@@ -25,16 +25,20 @@ servers:
   # Requires credentials/token files; specify their paths here or via env vars.
   # -------------------------------------------------------------------------
   - id: drive
-    load: "./mcp_directory --server_type drive"
-    # load: "python mcp_directory.py --server_type drive"
+    # load: "./mcp_directory --server_type drive"
+    load: "python mcp_directory.py --server_type drive --credentials /Users/dorazhao/Documents/needfinder-app/assets/agent"
     enabled: true
+    env:
+      GOOGLE_CREDENTIALS_JSON: "credentials.json"
+      GOOGLE_TOKEN_PICKLE: "token.pickle"
 
   # -------------------------------------------------------------------------
   # Filesystem MCP: interacts with the local filesystem.
   # -------------------------------------------------------------------------
 
   - id: filesystem
-    load: "./file-access ~/Documents ~/Desktop"
+    load: "python mcp_directory.py --server_type file"
+    # load: "./file-access ~/Documents ~/Desktop"
     enabled: true
 
   # -------------------------------------------------------------------------
@@ -50,13 +54,13 @@ servers:
   #   enabled: true
 
   - id: fetch
-    # load: "python mcp_directory.py --server_type fetch"
-    load: "./mcp_directory --server_type fetch"
+    load: "python mcp_directory.py --server_type fetch"
+    # load: "./mcp_directory --server_type fetch"
     enabled: true
   
   - id: ical 
-    # load: "python mcp_directory.py --server_type ical"
-    load: "./mcp_directory --server_type ical"
+    load: "python mcp_directory.py --server_type ical"
+    # load: "./mcp_directory --server_type ical"
     enabled: true
 
 

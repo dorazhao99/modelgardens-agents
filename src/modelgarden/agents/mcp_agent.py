@@ -57,7 +57,14 @@ Output contract
     - A short, clear description of what you did, which tools you used,
         and what the final outcome was.
     - The summary should be a short summary that a user can easily understand and use to understand what you did.
-    """
+
+- `artifact_uri`:
+    - If you produced any documents, files, or other artifacts,
+        return the URI of **the most important** artifact.
+        Examples:
+        • If you edited several docs: return the key doc or folder URL  
+    - If no persistent artifact exists, return `""`.
+"""
     task_context: str = dspy.InputField(
         description="A description of the task that the agent is trying to complete."
     )
@@ -67,18 +74,21 @@ Output contract
     summary: str = dspy.OutputField(
         description="Short natural-language summary of what you did, which tools you used, and the final outcome."
     )
+    artifact_uri: str = dspy.OutputField(
+        description="Main URI of any created/edited artifact (PR URL, doc URL, file path, etc.). Empty string if none."
+    )
 
 
 class MCPAgent:
-    def __init__(self, model: dspy.LM | None = None) -> None:
+    def __init__(self, model: dspy.LM | None = None, credentials_path: str = "") -> None:
         self.model = model or dspy.settings.lm
-
+        self.credentials_path = credentials_path
     def run(self, task_context: str) -> AgentResult:
 
         logger = logging.getLogger("modelgarden.agents")
 
-        # 1) Load MCP servers + global allow/deny filter
-        bundle = load_enabled_mcp_servers()
+        # 1) Load MCP servers + global allow/deny filter (GOOGLE_CREDENTIALS_JSON from env if set)
+        bundle = load_enabled_mcp_servers(credentials_path=self.credentials_path)
 
         # 2) Build DSPy toolset (MCP + core.* filtered by allow_fn)
         tools = build_toolset(bundle)
@@ -95,5 +105,5 @@ class MCPAgent:
         return AgentResult(
             success=True,
             message=result.summary,
-            artifact_uri= None,
+            artifact_uri= result.artifact_uri or None,
         )

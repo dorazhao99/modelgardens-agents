@@ -23,9 +23,12 @@ Run locally:
 from __future__ import annotations
 
 import io
+import logging
 import os
 import pickle
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -35,6 +38,9 @@ from googleapiclient.http import MediaIoBaseDownload
 from google.auth.exceptions import RefreshError
 
 from mcp.server.fastmcp import FastMCP
+
+# Note: Do not use argparse at module level — MCP launchers (mcp_directory, etc.)
+# pass their own args. Use GOOGLE_CREDENTIALS_JSON and GOOGLE_TOKEN_PICKLE from env.
 
 
 # ========= Scopes (Drive read/write + Docs edits) =========
@@ -46,8 +52,8 @@ SCOPES = [
 
 # ========= Auth / Service =========
 def _get_credentials(
-    credentials_file: str = "credentials.json",
-    token_file: str = "token.pickle",
+    credentials_file,
+    token_file,
     scopes: List[str] = SCOPES,
 ) -> Credentials:
     """
@@ -58,6 +64,7 @@ def _get_credentials(
     Credentials
         User-authorized credentials that auto-refresh when expired.
     """
+    logger.info(f"Credentials file CREDENTIALS: {credentials_file}, token file: {token_file}")
     creds: Optional[Credentials] = None
     if os.path.exists(token_file):
         try:
@@ -115,7 +122,7 @@ class DriveTools:
     - Indices are UTF-16; concurrent edits may shift indices between read & write.
     """
 
-    def __init__(self, credentials_file: str = "credentials.json", token_file: str = "token.pickle") -> None:
+    def __init__(self, credentials_file: str, token_file: str) -> None:
         creds = _get_credentials(credentials_file, token_file, SCOPES)
         self.drive = build("drive", "v3", credentials=creds)
         self.docs = build("docs", "v1", credentials=creds)
@@ -396,137 +403,157 @@ class DriveTools:
 
 
 # ========= FastMCP server wiring =========
+def create_mcp_server(credentials_path: str):
+    mcp = FastMCP("drive")
 
-mcp = FastMCP("drive")
+    # Construct a single DriveTools instance using env-provided paths (or defaults).
+    # Do not parse argparse at module level — MCP launchers (e.g. mcp_directory) pass
+    # their own args; use GOOGLE_CREDENTIALS_JSON and GOOGLE_TOKEN_PICKLE from env only.
+    # _CREDENTIALS_FILE = os.environ.get("GOOGLE_CREDENTIALS_JSON", "credentials.json")
+    # _TOKEN_FILE = os.environ.get("GOOGLE_TOKEN_PICKLE", "token.pickle")
+    _CREDENTIALS_FILE = os.path.join(credentials_path, "credentials.json")
+    _TOKEN_FILE = os.path.join(credentials_path, "token.pickle")
+    logger.info("Credentials file: %s, token file: %s", _CREDENTIALS_FILE, _TOKEN_FILE)
 
-# Construct a single DriveTools instance using env-provided paths (or defaults).
-_DRIVE = DriveTools(
-    credentials_file=os.environ.get("GOOGLE_CREDENTIALS_JSON", "credentials.json"),
-    token_file=os.environ.get("GOOGLE_TOKEN_PICKLE", "token.pickle"),
-)
+    _DRIVE = DriveTools(
+        credentials_file=_CREDENTIALS_FILE,
+        token_file=_TOKEN_FILE,
+    )
 
-@mcp.tool()
-def search_files(query: str, page_size: int = 20) -> List[Dict[str, Any]]:
-    """
-    Search for files in the user’s Google Drive.
+    @mcp.tool()
+    def search_files(query: str, page_size: int = 20) -> List[Dict[str, Any]]:
+        """
+        Search for files in the user’s Google Drive.
 
-    Parameters
-    ----------
-    query : str
-        Drive query string, e.g.:
-          - name contains 'Report'
-          - mimeType='application/vnd.google-apps.document'
-          - fullText contains 'budget'
-    page_size : int
-        Max number of results to return.
+        Parameters
+        ----------
+        query : str
+            Drive query string, e.g.:
+            - name contains 'Report'
+            - mimeType='application/vnd.google-apps.document'
+            - fullText contains 'budget'
+        page_size : int
+            Max number of results to return.
 
-    Returns
-    -------
-    List[Dict[str, Any]]
-        Each dict contains: {id, name, mimeType, modifiedTime}.
-    """
-    return _DRIVE.search_files(query, page_size)
-
-
-@mcp.tool()
-def get_file_as_text(file_id: str) -> str:
-    """
-    Return the file's contents as **plain text** when possible.
-
-    Behavior by file type:
-      - Google Docs: exported as text/plain.
-      - Google Sheets: exported as text/csv (returned as a single string).
-      - Google Slides: exported as text/plain (speaker notes & text boxes).
-      - Other/binary files (e.g., PDFs): returns a placeholder string with size/MIME.
-
-    Parameters
-    ----------
-    file_id : str
-        Drive file ID.
-
-    Returns
-    -------
-    str
-        Plain text contents (best effort). For binaries: a readable placeholder.
-    """
-    return _DRIVE.get_file_as_text(file_id)
+        Returns
+        -------
+        List[Dict[str, Any]]
+            Each dict contains: {id, name, mimeType, modifiedTime}.
+        """
+        return _DRIVE.search_files(query, page_size)
 
 
-@mcp.tool()
-def create_google_doc(name: str, parent_folder_id: Optional[str] = None) -> str:
-    """
-    Create a new Google Doc and return its Drive file ID.
+    @mcp.tool()
+    def get_file_as_text(file_id: str) -> str:
+        """
+        Return the file's contents as **plain text** when possible.
 
-    Parameters
-    ----------
-    name : str
-        Document name shown in Drive.
-    parent_folder_id : Optional[str]
-        If provided, create inside this folder.
+        Behavior by file type:
+        - Google Docs: exported as text/plain.
+        - Google Sheets: exported as text/csv (returned as a single string).
+        - Google Slides: exported as text/plain (speaker notes & text boxes).
+        - Other/binary files (e.g., PDFs): returns a placeholder string with size/MIME.
 
-    Returns
-    -------
-    str
-        The new file ID (also the Docs documentId).
-    """
-    return _DRIVE.create_google_doc(name, parent_folder_id)
+        Parameters
+        ----------
+        file_id : str
+            Drive file ID.
+
+        Returns
+        -------
+        str
+            Plain text contents (best effort). For binaries: a readable placeholder.
+        """
+        return _DRIVE.get_file_as_text(file_id)
 
 
-@mcp.tool()
-def suggest_edit(document_id: str, locator: Dict[str, Any], suggestion_text: str) -> Dict[str, Any]:
-    """
-    Insert and highlight an edit in a Google Doc at a location chosen by `locator`.
+    @mcp.tool()
+    def create_google_doc(name: str, parent_folder_id: Optional[str] = None) -> str:
+        """
+        Create a new Google Doc and return its Drive file ID.
 
-    Parameters
-    ----------
-    document_id : str
-        Docs document ID (same as Drive file ID for Google Docs).
-    locator : Dict[str, Any]
-        Where to insert. Supported forms (case-insensitive `mode`):
-          - {"mode": "top"}
-              Insert near the start of the document (index 1).
+        Parameters
+        ----------
+        name : str
+            Document name shown in Drive.
+        parent_folder_id : Optional[str]
+            If provided, create inside this folder.
 
-          - {"mode": "end"}
-              Insert at the end of the body content.
+        Returns
+        -------
+        str
+            The new file ID (also the Docs documentId).
+        """
+        return _DRIVE.create_google_doc(name, parent_folder_id)
 
-          - {"mode": "after_text", "text": "<literal>", "occurrence": 1}
-              Find the Nth (default 1) occurrence of the literal substring `text`
-              in document order and insert *after* it.
-              Example:
-                {"mode": "after_text", "text": "Introduction", "occurrence": 1}
 
-          - {"mode": "after_heading", "heading": "<substring>"}
-              Find the first paragraph styled as a heading (Heading 1..6, Title, Subtitle)
-              whose text contains `heading` (case-insensitive substring) and insert *after* it.
-              Example:
-                {"mode": "after_heading", "heading": "Methods"}
+    @mcp.tool()
+    def suggest_edit(document_id: str, locator: Dict[str, Any], suggestion_text: str) -> Dict[str, Any]:
+        """
+        Insert and highlight an edit in a Google Doc at a location chosen by `locator`.
 
-        Notes:
-          - For `after_text`, matching is a simple substring search through paragraph text runs.
-          - For `after_heading`, we match on heading-styled paragraphs only.
-          - If no valid location can be computed, we fall back to index 1 (top).
+        Parameters
+        ----------
+        document_id : str
+            Docs document ID (same as Drive file ID for Google Docs).
+        locator : Dict[str, Any]
+            Where to insert. Supported forms (case-insensitive `mode`):
+            - {"mode": "top"}
+                Insert near the start of the document (index 1).
 
-    suggestion_text : str
-        Text to insert and highlight (light orange).
+            - {"mode": "end"}
+                Insert at the end of the body content.
 
-    Returns
-    -------
-    Dict[str, Any]
-        {
-          "insert_index": int,              # index used for insertion
-          "insert_response": dict,          # Docs batchUpdate response (insertText)
-          "highlight_response": dict        # Docs batchUpdate response (updateTextStyle)
-        }
+            - {"mode": "after_text", "text": "<literal>", "occurrence": 1}
+                Find the Nth (default 1) occurrence of the literal substring `text`
+                in document order and insert *after* it.
+                Example:
+                    {"mode": "after_text", "text": "Introduction", "occurrence": 1}
 
-    Behavior & Caveats
-    ------------------
-    - Google Docs API does not expose a public "Suggesting mode" write path; we perform real
-      insertions and then highlight the inserted span for a clear, reviewable UX.
-    - Document indices are UTF-16 code-unit based; concurrent human edits may shift indices
-      between read and write operations.
-    """
-    return _DRIVE.suggest_edit(document_id, locator, suggestion_text)
+            - {"mode": "after_heading", "heading": "<substring>"}
+                Find the first paragraph styled as a heading (Heading 1..6, Title, Subtitle)
+                whose text contains `heading` (case-insensitive substring) and insert *after* it.
+                Example:
+                    {"mode": "after_heading", "heading": "Methods"}
+
+            Notes:
+            - For `after_text`, matching is a simple substring search through paragraph text runs.
+            - For `after_heading`, we match on heading-styled paragraphs only.
+            - If no valid location can be computed, we fall back to index 1 (top).
+
+        suggestion_text : str
+            Text to insert and highlight (light orange).
+
+        Returns
+        -------
+        Dict[str, Any]
+            {
+            "insert_index": int,              # index used for insertion
+            "insert_response": dict,          # Docs batchUpdate response (insertText)
+            "highlight_response": dict        # Docs batchUpdate response (updateTextStyle)
+            }
+
+        Behavior & Caveats
+        ------------------
+        - Google Docs API does not expose a public "Suggesting mode" write path; we perform real
+        insertions and then highlight the inserted span for a clear, reviewable UX.
+        - Document indices are UTF-16 code-unit based; concurrent human edits may shift indices
+        between read and write operations.
+        """
+        return _DRIVE.suggest_edit(document_id, locator, suggestion_text)
+    return mcp
+
+def main(credentials_path: str):
+    mcp = create_mcp_server(credentials_path)
+    mcp.run()
+
+
 
 
 if __name__ == "__main__":
-    mcp.run()
+    main(credentials_path=None)
+    # parser = argparse.ArgumentParser(description="Run Drive MCP Server")
+    # parser.add_argument("--credentials", type=str, required=False, help="Path to credentials folder")
+    # args = parser.parse_args()
+    # credentials_path = args.credentials
+    # main(credentials_path)

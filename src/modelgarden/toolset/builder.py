@@ -92,6 +92,9 @@ def build_toolset(servers_bundle) -> List[dspy.Tool]:
     for s in servers_bundle.servers:
         for fn in getattr(s.client, "tools", []):
             ns_name, real_fn = _namespace_tool(s.id, fn)
+            # print(f"ns_name: {ns_name}")
+            # print(f"real_fn: {real_fn}")
+            # print(f"allow_fn: {allow_fn(ns_name)}")
             if allow_fn(ns_name):
                 tools.append(_wrap_as_dspy_tool(ns_name, real_fn))
 

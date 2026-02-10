@@ -31,23 +31,25 @@ class MCPConfigBundle:
     allow_fn: Callable[[str], bool]  # e.g., allow("drive.search_files") -> True/False
 
 
-def load_enabled_mcp_servers(config_path: str | None = None) -> MCPConfigBundle:
+def load_enabled_mcp_servers(config_path: str | None = None, credentials_path: str = "") -> MCPConfigBundle:
     """
     Load all enabled MCP servers + global allow/deny settings.
 
     Args:
         config_path: Optional explicit path to mcp_servers.yaml. If None,
                      uses PRECURSOR_MCP_SERVERS_FILE or the package default.
+                     GOOGLE_CREDENTIALS_JSON can be set in the environment for Drive.
 
     Returns:
         MCPConfigBundle(servers=[LoadedServer], allow_fn=callable)
     """
     cfg = (
-        load_mcp_servers_yaml()
+        load_mcp_servers_yaml(credentials_path=credentials_path)
         if config_path is None
         else load_yaml_override(config_path)
     )
 
+    print(f"CFG: {cfg}")
     defaults: Dict[str, Any] = cfg.get("defaults") or {}
     servers_cfg: List[Dict[str, Any]] = cfg.get("servers") or []
 
