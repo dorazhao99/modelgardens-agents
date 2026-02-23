@@ -240,7 +240,7 @@ class ScratchpadUpdater(dspy.Module):
                 edit_in_scratchpad,
                 remove_from_scratchpad,
             ],
-            max_iters=20,
+            max_iters=30,
         )
         self.resource_extractor = (
             ExtractProjectResources() if run_resource_extraction else None

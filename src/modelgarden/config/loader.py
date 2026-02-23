@@ -191,6 +191,7 @@ def get_settings() -> Dict[str, Any]:
 
 def load_mcp_servers_yaml(
     credentials_path: str | None = None,
+    db_path: str | None = None,
 ) -> Dict[str, Any]:
     """
     Load `mcp_servers.yaml`, using PRECURSOR_MCP_SERVERS_FILE if set.
@@ -225,6 +226,6 @@ def load_mcp_servers_yaml(
     config = _load_yaml(path)
     # Dynamically update the load path for the drive server
     # config['servers'][0]['load'] = f"python mcp_directory.py --server_type drive --credentials {credentials_path}"
-
     config['servers'][0]['load'] = f"./mcp_directory --server_type drive --credentials {credentials_path}"
+    config['servers'][1]['load'] = f'./mcp_directory --server_type gum --db_path "{db_path}"'
     return config

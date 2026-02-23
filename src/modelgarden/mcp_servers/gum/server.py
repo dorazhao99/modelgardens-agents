@@ -1,118 +1,125 @@
+import argparse
+import math
 import os
-from contextlib import asynccontextmanager
+import re
 from dataclasses import dataclass
-from collections.abc import AsyncIterator
-from datetime import timedelta, datetime, timezone
-from typing import Optional
+from typing import List, Optional, Tuple
+from sqlite3 import connect, Connection
 
+from litellm.constants import DB_SPEND_UPDATE_JOB_NAME
 from mcp.server.fastmcp import FastMCP
-from gum import gum
-from gum.db_utils import get_related_observations
-from precursor.config.loader import get_user_name
+import logging
+
+logger = logging.getLogger(__name__)
+_db_path: str = ""
 
 
 @dataclass
 class AppContext:
-    gum_instance: gum
+    gum_db: Connection
 
 
-@asynccontextmanager
-async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
-    # NOTE: this doesn't listen to events — it just connects to the db
-    # you'll need to start a separate GUM listener to listen to Screen, for example
-    # Be robust if USER_NAME isn't present in env: fall back to config loader.
-    user_name = os.environ.get("USER_NAME") or get_user_name()
-    gum_instance = gum(user_name, None)  # no model
-
-    await gum_instance.connect_db()
-    try:
-        yield AppContext(gum_instance=gum_instance)
-    finally:
-        # Graceful teardown if supported
-        close = getattr(gum_instance, "close_db", None)
-        if callable(close):
-            try:
-                await close()
-            except Exception:
-                pass
+def _tokenize(text: str) -> List[str]:
+    return re.findall(r"\w+", text.lower())
 
 
-mcp = FastMCP("gum", lifespan=app_lifespan)
+def _query_db(db: Connection, query: str, limit: int = 3) -> List[Tuple[str, float, float]]:
+    """Return the top-`limit` propositions ranked by BM25 similarity to `query`.
 
-
-@mcp.tool()
-async def get_user_context(
-    query: Optional[str] = "",
-    start_hh_mm_ago: Optional[str] = None,
-    end_hh_mm_ago: Optional[str] = None,
-) -> str:
+    Each result is a (description, confidence, bm25_score) tuple.
+    If `query` is empty, rows are returned in DB order with score 0.
     """
-    A tool to retrieve context for a user query within a time window.
-    Use this liberally, especially when something is underspecified or unclear.
+    rows = db.execute("SELECT description, confidence FROM gum_propositions").fetchall()
 
-    Args:
-        query: The query text (will be pre-processed by a lexical
-            retrieval model such as BM25). This is OPTIONAL. If the user asks 
-            for something general (e.g. what am I doing, help me now), 
-            then your query can be empty. Otherwise, try to be specific.
-        start_hh_mm_ago: **Lower bound** of the window, expressed as a string
-            in the form ``"HH:MM"`` meaning "HH hours and MM minutes ago from
-            now".  For example, ``"01:00"`` = one hour ago. This is ALSO OPTIONAL.
-            If you don't need to specify a lower bound, pass ``None``.
-        end_hh_mm_ago: **Upper bound** of the window, also a ``"HH:MM"`` string
-            relative to now (e.g., ``"00:10"`` = ten minutes ago). This is ALSO OPTIONAL.
-            If you don't need to specify a upper bound, pass ``None``.
+    if not rows:
+        return []
 
-    Returns:
-        A string containing the retrieved contextual information.
-    """
+    descriptions = [row[0] or "" for row in rows]
+    query_tokens = _tokenize(query)
 
-    ctx = mcp.get_context()
-    now = datetime.now(timezone.utc)
+    if not query_tokens:
+        return [(desc, row[1], 0.0) for desc, row in zip(descriptions, rows)][:limit]
 
-    # Convert time strings to datetime objects
-    start_time = None
-    end_time = None
-    if start_hh_mm_ago:
-        hours, minutes = map(int, start_hh_mm_ago.split(":"))
-        start_time = now - timedelta(hours=hours, minutes=minutes)
-    if end_hh_mm_ago:
-        hours, minutes = map(int, end_hh_mm_ago.split(":"))
-        end_time = now - timedelta(hours=hours, minutes=minutes)
+    # BM25 parameters
+    k1 = 1.5
+    b = 0.75
 
-    gum_instance = ctx.request_context.lifespan_context.gum_instance
+    corpus = [_tokenize(d) for d in descriptions]
+    avg_dl = sum(len(doc) for doc in corpus) / len(corpus) if corpus else 1.0
+    n_docs = len(corpus)
 
-    results = await gum_instance.query(
-        query,
-        start_time=start_time,
-        end_time=end_time,
-        limit=3
-    )
+    df: dict[str, int] = {}
+    for token in query_tokens:
+        df[token] = sum(1 for doc in corpus if token in doc)
 
-    if not results:
-        return "No relevant context found for the given query and time window."
+    scores: List[float] = []
+    for doc in corpus:
+        doc_len = len(doc)
+        tf_map: dict[str, int] = {}
+        for t in doc:
+            tf_map[t] = tf_map.get(t, 0) + 1
 
-    context_parts = []
-    async with gum_instance._session() as session:
-        for proposition, score in results:
-            prop_text = f"• {proposition.text}"
-            if proposition.reasoning:
-                prop_text += f"\n  Reasoning: {proposition.reasoning}"
-            if proposition.confidence:
-                prop_text += f"\n  Confidence: {proposition.confidence}"
-            prop_text += f"\n  Relevance Score: {score:.2f}"
+        score = 0.0
+        for token in query_tokens:
+            if token not in df or df[token] == 0:
+                continue
+            idf = math.log((n_docs - df[token] + 0.5) / (df[token] + 0.5) + 1.0)
+            tf = tf_map.get(token, 0)
+            score += idf * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * doc_len / avg_dl))
+        scores.append(score)
 
-            # Get and format related observations (limit 1)
-            observations = await get_related_observations(session, proposition.id, limit=1)
-            if observations:
-                prop_text += "\n  Supporting Observations:"
-                for obs in observations:
-                    prop_text += f"\n    - [{obs.observer_name}] {obs.content}"
+    confidences = [r[1] for r in rows]
+    combined = [(desc, conf, bm25 * conf)
+                for desc, conf, bm25 in zip(descriptions, confidences, scores)]
+    ranked = sorted(combined, key=lambda x: x[2], reverse=True)
+    return ranked[:limit]
 
-            context_parts.append(prop_text)
 
-    return "\n\n".join(context_parts)
+def create_mcp_server(db_path: str):
+    mcp = FastMCP("gum")
+    logger.info(f"Creating MCP server for database at {db_path}")
+    db = connect(db_path)
+    logger.info(f"Connected to database at {db_path}")
+    # results = _query_db(db, "test")
+    # print(results)
 
+    @mcp.tool()
+    async def get_user_context(
+        query: Optional[str] = "",
+    ) -> str:
+        """
+        A tool to retrieve context for a user query within a time window.
+        Use this liberally, especially when something is underspecified or unclear.
+
+        Args:
+            query: The query text (will be pre-processed by a lexical
+                retrieval model such as BM25). This is OPTIONAL. If the user asks 
+                for something general (e.g. what am I doing, help me now), 
+                then your query can be empty. Otherwise, try to be specific.
+
+        Returns:
+            A string containing the retrieved contextual information.
+        """
+
+
+        results = _query_db(
+            db=db,
+            query=query,
+            limit=3
+        )
+
+        db.close()
+
+        context_parts = []
+        for result in results:
+            context_parts.append(result[0])
+
+        return "\n\n".join(context_parts)
+    return mcp
+
+def main(db_path: str):
+    mcp = create_mcp_server(db_path)
+    mcp.run()
 
 if __name__ == "__main__":
-    mcp.run()
+    main('/Users/dorazhao/Library/Application Support/DARTBoard/app.db')

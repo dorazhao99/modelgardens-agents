@@ -31,7 +31,7 @@ class MCPConfigBundle:
     allow_fn: Callable[[str], bool]  # e.g., allow("drive.search_files") -> True/False
 
 
-def load_enabled_mcp_servers(config_path: str | None = None, credentials_path: str = "") -> MCPConfigBundle:
+def load_enabled_mcp_servers(config_path: str | None = None, credentials_path: str = "", db_path: str = "") -> MCPConfigBundle:
     """
     Load all enabled MCP servers + global allow/deny settings.
 
@@ -44,7 +44,7 @@ def load_enabled_mcp_servers(config_path: str | None = None, credentials_path: s
         MCPConfigBundle(servers=[LoadedServer], allow_fn=callable)
     """
     cfg = (
-        load_mcp_servers_yaml(credentials_path=credentials_path)
+        load_mcp_servers_yaml(credentials_path=credentials_path, db_path=db_path)
         if config_path is None
         else load_yaml_override(config_path)
     )

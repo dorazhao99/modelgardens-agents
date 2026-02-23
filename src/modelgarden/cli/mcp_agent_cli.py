@@ -60,12 +60,14 @@ def safe_print(msg):
 def main() -> dict:
     try:
         parser = argparse.ArgumentParser(description="Run MCP Agent CLI")
-        parser.add_argument("--model", default="openai/gpt-5", help="Model to use")
+        parser.add_argument("--model", default="gemini/gemini-3-flash-preview", help="Model to use")
         parser.add_argument("--task", default="Make a travel itinerary for a trip to Munich and save it in the Google Drive folder called 'Travel Itineraries'", help="Task to run")
         parser.add_argument("--credentials", default="", help="Path to Google credentials JSON file")
+        parser.add_argument("--db_path", default="", help="Path to SQLite3 database file")
         args = parser.parse_args()
         model = args.model
         task = args.task
+        db_path = args.db_path
         credentials = args.credentials
 
         safe_print("=" * 60)
@@ -103,16 +105,19 @@ def main() -> dict:
         safe_print(f"Task: {task}\n")
         safe_print(f"Credentials: {credentials}\n")
         # Configure DSPy
-        lm = dspy.LM(model, temperature=1.0, max_tokens=24000)
+        if model.startswith("gemini/"):
+            lm = dspy.LM(model, temperature=1.0, max_tokens=24000, api_key=os.getenv("GEMINI_API_KEY"))
+        else:
+            lm = dspy.LM(model, temperature=1.0, max_tokens=24000, api_key=os.getenv("OPENAI_API_KEY"))
         dspy.configure(lm=lm)
         os.environ["GOOGLE_CREDENTIALS_JSON"] = credentials + "/credentials.json"
         print(os.environ["GOOGLE_CREDENTIALS_JSON"])
         os.environ["GOOGLE_TOKEN_PICKLE"] = credentials + "/token.pickle"
-        agent = MCPAgent(model=lm, credentials_path=credentials)
+        agent = MCPAgent(model=lm, credentials_path=credentials, db_path=db_path)
         res = agent.run(
             task_context=task,
         )
-        output = {"status": "success", "result": {"message": res.message, "artifact_uri": res.artifact_uri}}
+        output = {"status": "success", "result": {"message": res.message, "artifact_uri": res.artifact_uri, "context": res.context}}
         safe_print(output)
         return output
         

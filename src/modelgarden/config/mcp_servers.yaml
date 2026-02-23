@@ -29,6 +29,9 @@ servers:
     # load: "python mcp_directory.py --server_type drive"
     enabled: true
 
+  - id: gum
+    load: "./mcp_directory --server_type gum"
+    enabled: true
   # -------------------------------------------------------------------------
   # Filesystem MCP: interacts with the local filesystem.
   # -------------------------------------------------------------------------
@@ -58,6 +61,7 @@ servers:
     # load: "python mcp_directory.py --server_type ical"
     load: "./mcp_directory --server_type ical"
     enabled: true
+  
 
 
   # - id: websearch

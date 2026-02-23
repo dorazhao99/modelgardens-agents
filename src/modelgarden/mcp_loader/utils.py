@@ -63,29 +63,21 @@ def apply_env(spec: Dict[str, Any]) -> None:
 # ----------------------------
 # Command normalization + spawn
 # ----------------------------
-def _build_cmd_string(load_field: Any) -> str:
+def _build_cmd(load_field: Any) -> List[str]:
     """
-    Normalize the YAML 'load' field into a single shell command string.
+    Normalize the YAML 'load' field into a list of command arguments.
+
+    Returning a list (instead of a joined string) preserves arguments that
+    contain spaces (e.g. file paths like "/Users/me/Application Support/app.db")
+    because mcp2py.load() accepts ``list[str]`` and passes it through as-is.
 
     Accepts:
-      - str: e.g. "python -m precursor.mcp_servers.drive.server"
-      - dict: {command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "/Users/michael/Projects", "/Users/michael/Desktop"]}
-
-    Returns
-    -------
-    str
-        A shell-safe command string suitable for passing to mcp2py.load().
+      - str: e.g. ``'python mcp_directory.py --db_path "/path with spaces/app.db"'``
+      - dict: ``{command: "npx", args: ["-y", "@mcp/server", "/path with spaces"]}``
     """
     if isinstance(load_field, str):
-        # Expand ~ and ${VARS} for each token; do not rely on shell expansion.
-        # Many launchers pass a single command string to subprocess without a shell.
         parts = shlex.split(load_field)
-        expanded_parts = [
-            os.path.expandvars(os.path.expanduser(str(p))) for p in parts
-        ]
-        # IMPORTANT: Do NOT add shell quotes here. mcp2py may not spawn via a shell,
-        # so quotes would be passed literally to the process.
-        return " ".join(expanded_parts)
+        return [os.path.expandvars(os.path.expanduser(str(p))) for p in parts]
 
     if isinstance(load_field, dict):
         cmd = load_field.get("command")
@@ -94,48 +86,38 @@ def _build_cmd_string(load_field: Any) -> str:
             raise ValueError("Invalid 'load' mapping: missing 'command'.")
         if not isinstance(args, list):
             raise ValueError("Invalid 'load' mapping: 'args' must be a list of strings.")
-        # Expand ~ and ${VARS} in both command and args
         cmd_expanded = os.path.expandvars(os.path.expanduser(str(cmd)))
         args_expanded = [os.path.expandvars(os.path.expanduser(str(a))) for a in args]
-        parts = [cmd_expanded] + args_expanded
-        # IMPORTANT: Do NOT add shell quotes here. mcp2py may not spawn via a shell,
-        # so quotes would be passed literally to the process.
-        return " ".join(parts)
+        return [cmd_expanded] + args_expanded
 
     raise TypeError(f"Unsupported 'load' type: {type(load_field)!r}")
 
 
 def start_server(spec: Dict[str, Any]) -> Any:
     """Spawn one MCP server via mcp2py with helpful error context."""
-    import sys
     import warnings
-    
-    cmd: str | None = None
+
+    cmd: List[str] | None = None
     try:
-        cmd = _build_cmd_string(spec["load"])
-        
-        # Suppress stderr warnings during MCP server startup to avoid
-        # "I/O operation on closed file" errors in PyInstaller bundles
+        cmd = _build_cmd(spec["load"])
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             try:
-                # Temporarily suppress any I/O errors
                 return mcp2py_load(cmd, auto_auth=True, headers=spec.get("headers"))
             except (ValueError, OSError) as io_err:
                 if "closed file" in str(io_err):
-                    # This is a known issue with PyInstaller - ignore and retry
                     return mcp2py_load(cmd, auto_auth=True, headers=spec.get("headers"))
                 raise
-                
+
     except Exception as e:
         sid = spec.get("id", "<unknown-id>")
-        # Build a richer error with expanded command and unresolved env var hints
+        cmd_str = " ".join(cmd) if cmd else None
         msg = f"Failed to start MCP '{sid}' with command: {spec['load']}"
-        if cmd:
-            msg += f" (expanded: {cmd})"
-            # Detect unresolved environment variables like $VAR or ${VAR}
+        if cmd_str:
+            msg += f" (expanded: {cmd_str})"
             unresolved = []
-            for match in re.findall(r"\$(\{?[A-Za-z_][A-Za-z0-9_]*\}?)", cmd):
+            for match in re.findall(r"\$(\{?[A-Za-z_][A-Za-z0-9_]*\}?)", cmd_str):
                 var_name = match.strip("{}")
                 if not os.environ.get(var_name):
                     unresolved.append(var_name)

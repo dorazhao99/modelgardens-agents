@@ -7,7 +7,7 @@ generic ReAct program for a single task. Keep this thin: orchestration only.
 
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, List
 import sys
 from pathlib import Path
 
@@ -29,6 +29,7 @@ logging.getLogger("modelgarden.tools").setLevel(logging.INFO)
 class AgentResult:
     success: bool
     message: str
+    context: List[str]
     artifact_uri: Optional[str] = None
 
 
@@ -77,18 +78,23 @@ Output contract
     artifact_uri: str = dspy.OutputField(
         description="Main URI of any created/edited artifact (PR URL, doc URL, file path, etc.). Empty string if none."
     )
+    context: List[str] = dspy.OutputField(
+        description="A list of all of the pieces of information you retrieved about the user that are relevant to the task."
+    )
 
 
 class MCPAgent:
-    def __init__(self, model: dspy.LM | None = None, credentials_path: str = "") -> None:
+    def __init__(self, model: dspy.LM | None = None, credentials_path: str = "", db_path: str = "") -> None:
         self.model = model or dspy.settings.lm
         self.credentials_path = credentials_path
+        self.db_path = db_path
+
     def run(self, task_context: str) -> AgentResult:
 
         logger = logging.getLogger("modelgarden.agents")
 
         # 1) Load MCP servers + global allow/deny filter (GOOGLE_CREDENTIALS_JSON from env if set)
-        bundle = load_enabled_mcp_servers(credentials_path=self.credentials_path)
+        bundle = load_enabled_mcp_servers(credentials_path=self.credentials_path, db_path=self.db_path)
 
         # 2) Build DSPy toolset (MCP + core.* filtered by allow_fn)
         tools = build_toolset(bundle)
@@ -97,7 +103,7 @@ class MCPAgent:
 
         # 3) Run ReAct program
         with dspy.context(lm=self.model):
-            react = dspy.ReAct(MCPTaskSignature, tools=tools, max_iters=30)
+            react = dspy.ReAct(MCPTaskSignature, tools=tools, max_iters=20)
             result = react(
                 task_context=task_context,
             )
@@ -106,4 +112,5 @@ class MCPAgent:
             success=True,
             message=result.summary,
             artifact_uri= result.artifact_uri or None,
+            context=result.context,
         )
