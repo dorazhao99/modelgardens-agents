@@ -60,7 +60,7 @@ def safe_print(msg):
 def main() -> dict:
     try:
         parser = argparse.ArgumentParser(description="Run MCP Agent CLI")
-        parser.add_argument("--model", default="openai/gpt-5", help="Model to use")
+        parser.add_argument("--model", default="gemini/gemini-3-pro-preview", help="Model to use")
         parser.add_argument("--task", default="Make a travel itinerary for a trip to Munich and save it in the Google Drive folder called 'Travel Itineraries'", help="Task to run")
         parser.add_argument("--credentials", default="", help="Path to Google credentials JSON file")
         args = parser.parse_args()

@@ -68,9 +68,6 @@ Output contract
     task_context: str = dspy.InputField(
         description="A description of the task that the agent is trying to complete."
     )
-    # artifact_uri: str = dspy.OutputField(
-    #     description="Main URI of any created/edited artifact that was logged via core.store_artifact (PR URL, doc URL, file path, etc.). Empty string if none."
-    # )
     summary: str = dspy.OutputField(
         description="Short natural-language summary of what you did, which tools you used, and the final outcome."
     )
@@ -97,7 +94,7 @@ class MCPAgent:
 
         # 3) Run ReAct program
         with dspy.context(lm=self.model):
-            react = dspy.ReAct(MCPTaskSignature, tools=tools, max_iters=30)
+            react = dspy.ReAct(MCPTaskSignature, tools=tools, max_iters=50)
             result = react(
                 task_context=task_context,
             )
