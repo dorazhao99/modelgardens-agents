@@ -25,8 +25,8 @@ servers:
   # Requires credentials/token files; specify their paths here or via env vars.
   # -------------------------------------------------------------------------
   - id: drive
-    load: "./mcp_directory --server_type drive"
-    # load: "python mcp_directory.py --server_type drive"
+    # load: "./mcp_directory --server_type drive"
+    load: "python mcp_directory.py --server_type drive"
     enabled: true
 
   # -------------------------------------------------------------------------
@@ -34,7 +34,8 @@ servers:
   # -------------------------------------------------------------------------
 
   - id: filesystem
-    load: "./file-access ~/Documents ~/Desktop"
+    # load: "./file-access ~/Documents ~/Desktop"
+    load: "npx -y @modelcontextprotocol/server-filesystem"
     enabled: true
 
   # -------------------------------------------------------------------------
@@ -42,22 +43,23 @@ servers:
   # No special environment variables are required beyond GITHUB_TOKEN.
   # -------------------------------------------------------------------------
   - id: websearch
-    load: "./brave-search-mcp --transport stdio"
+    # load: "./brave-search-mcp --transport stdio"
+    load: "npx -y @brave/brave-search-mcp-server --transport stdio"
     enabled: true
 
-  # - id: slides
-  #   load: "./make_slides"
-  #   enabled: true
+  - id: slides
+    load: "node src/modelgarden/mcp_servers/slides/src/index.js"
+    enabled: true
 
   - id: fetch
-    # load: "python mcp_directory.py --server_type fetch"
-    load: "./mcp_directory --server_type fetch"
+    load: "python mcp_directory.py --server_type fetch"
+    # load: "./mcp_directory --server_type fetch"
     enabled: true
   
-  - id: ical 
-    # load: "python mcp_directory.py --server_type ical"
-    load: "./mcp_directory --server_type ical"
-    enabled: true
+  # - id: ical 
+  #   # load: "python mcp_directory.py --server_type ical"
+  #   load: "./mcp_directory --server_type ical"
+  #   enabled: true
 
 
   # - id: websearch
