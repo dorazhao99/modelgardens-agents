@@ -7,6 +7,7 @@ and returns both the loaded servers and a compiled allow_fn for tool filtering.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List
 
@@ -17,6 +18,8 @@ from modelgarden.mcp_loader.utils import (
     compile_allow_fn,
     load_yaml_override,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -49,7 +52,6 @@ def load_enabled_mcp_servers(config_path: str | None = None, credentials_path: s
         else load_yaml_override(config_path)
     )
 
-    print(f"CFG: {cfg}")
     defaults: Dict[str, Any] = cfg.get("defaults") or {}
     servers_cfg: List[Dict[str, Any]] = cfg.get("servers") or []
 
@@ -62,8 +64,12 @@ def load_enabled_mcp_servers(config_path: str | None = None, credentials_path: s
             continue
 
         apply_env(spec)
-        client = start_server(spec)
-        servers.append(LoadedServer(id=str(spec["id"]), client=client))
+        sid = str(spec["id"])
+        try:
+            client = start_server(spec)
+            servers.append(LoadedServer(id=sid, client=client))
+        except Exception as e:
+            logger.warning("Skipping MCP server '%s' — failed to start: %s", sid, e)
 
     allow_fn = compile_allow_fn(defaults)
     return MCPConfigBundle(servers=servers, allow_fn=allow_fn)
@@ -103,8 +109,12 @@ def load_selected_mcp_servers(server_ids: List[str], config_path: str | None = N
             continue
 
         apply_env(spec)
-        client = start_server(spec)
-        servers.append(LoadedServer(id=str(spec["id"]), client=client))
+        sid = str(spec["id"])
+        try:
+            client = start_server(spec)
+            servers.append(LoadedServer(id=sid, client=client))
+        except Exception as e:
+            logger.warning("Skipping MCP server '%s' — failed to start: %s", sid, e)
 
     allow_fn = compile_allow_fn(defaults)
     return MCPConfigBundle(servers=servers, allow_fn=allow_fn)

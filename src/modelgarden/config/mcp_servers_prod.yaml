@@ -58,10 +58,10 @@ servers:
     # load: "./mcp_directory --server_type fetch"
     enabled: true
   
-  - id: ical 
-    load: "python mcp_directory.py --server_type ical"
-    # load: "./mcp_directory --server_type ical"
-    enabled: true
+  # - id: ical 
+  #   load: "python mcp_directory.py --server_type ical"
+  #   # load: "./mcp_directory --server_type ical"
+  #   enabled: true
 
 
   # - id: websearch
